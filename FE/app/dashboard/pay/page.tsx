@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { usePrivy, useWallets } from '@privy-io/react-auth';
 import { ethers } from 'ethers';
 import { MobileLayout } from '@/components/mobile-layout';
+import { DetailPageSkeleton } from '@/components/skeleton';
 import { Input } from '@/components/ui/input';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import {
@@ -194,12 +195,6 @@ export default function DeFiPage() {
 
     const tokenBalance = (proto: DeFiProtocol) =>
         proto.depositAsset === 'XAUt0' ? xautBalance : wbtcBalance;
-
-    // Redirect if not authed
-    useEffect(() => {
-        if (typeof window === 'undefined') return;
-        window.localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
-    }, [history]);
 
     // ---- Auth gate -----------------------------------------------------------
     useEffect(() => {
@@ -422,15 +417,19 @@ export default function DeFiPage() {
     return (
         <MobileLayout activeTab="pay">
             {/* ── Header ─────────────────────────────────────────────────── */}
-            <div className="bg-background sticky top-0 z-40 px-4 pt-12 pb-3 border-b border-border">
-                <div className="flex items-center gap-3 mb-3">
-                    <button onClick={() => router.push('/dashboard')} className="p-2 rounded-full bg-muted hover:bg-secondary transition-colors">
+            <div className="bg-background/90 backdrop-blur-md sticky top-0 z-40 px-4 pt-safe md:pt-0 pb-4 border-b border-border">
+                <div className="flex items-center gap-3 mb-4">
+                    <button
+                        onClick={() => router.push('/dashboard')}
+                        className="btn-haptic p-2.5 rounded-full bg-muted hover:bg-secondary transition-colors shrink-0"
+                        aria-label="Back to dashboard"
+                    >
                         <ArrowLeft className="w-5 h-5" />
                     </button>
-                    <div className="flex-1">
-                        <h1 className="text-xl font-semibold">DeFi Yield</h1>
+                    <div className="flex-1 min-w-0">
+                        <h1 className="text-xl font-semibold leading-tight">DeFi Yield</h1>
                         {/* Balance row */}
-                        <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5">
+                        <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1">
                             <span className="text-xs text-muted-foreground">
                                 USDC <span className="font-medium text-foreground">${usdcBalance.toFixed(2)}</span>
                             </span>
@@ -446,15 +445,14 @@ export default function DeFiPage() {
                             )}
                         </div>
                     </div>
-                    <StatusPill status={status} />
                 </div>
 
                 {/* Action bar */}
-                <div className="flex gap-2">
+                <div className="flex gap-2.5">
                     <button
                         onClick={handleAnalyze}
                         disabled={analyzing || autoRunning}
-                        className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-muted hover:bg-secondary text-sm font-medium transition-colors disabled:opacity-50"
+                        className="btn-haptic flex-1 flex items-center justify-center gap-2 py-3 rounded-xl bg-muted hover:bg-secondary text-sm font-medium transition-colors disabled:opacity-50"
                     >
                         {analyzing
                             ? <><Loader2 className="w-4 h-4 animate-spin" /> Analyzing…</>
@@ -463,7 +461,7 @@ export default function DeFiPage() {
                     <button
                         onClick={handleAuto}
                         disabled={autoRunning || analyzing || usdcBalance <= 0}
-                        className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-primary text-white text-sm font-semibold transition-colors disabled:opacity-50 active:scale-[0.98]"
+                        className="btn-haptic flex-1 flex items-center justify-center gap-2 py-3 rounded-xl bg-primary text-white text-sm font-semibold transition-colors disabled:opacity-50"
                     >
                         {autoRunning
                             ? <><Loader2 className="w-4 h-4 animate-spin" /> Running…</>
@@ -475,32 +473,7 @@ export default function DeFiPage() {
             {/* ============================================================
                 BODY
                 ============================================================ */}
-            <div className="px-4 pb-5 space-y-4 animate-fade-in">
-                {/* HEADLINE STATS — proper raised cards (not inside the hero) */}
-                <div className="grid grid-cols-2 gap-3">
-                    <div className="ios-card-elev p-4">
-                        <p className="section-label mb-1">Total Stacked</p>
-                        <p className="text-title-1 font-num leading-tight">
-                            ${formatUSD(totalStacked)}
-                        </p>
-                        <p className="text-footnote text-muted-foreground mt-1 truncate">
-                            {history.length} stack{history.length === 1 ? '' : 's'}
-                            {totalShares > 0 && ` · ${totalShares.toFixed(4)} sh`}
-                        </p>
-                    </div>
-                    <div className="ios-card-elev p-4">
-                        <p className="section-label mb-1">Next Stack</p>
-                        <p className="text-title-1 font-num leading-tight">
-                            {countdown}
-                        </p>
-                        <p className="text-footnote text-muted-foreground mt-1 truncate">
-                            {settings.enabled
-                                ? `${labelFor(settings.frequency)} · $${formatUSD(settings.amountPerStack)}`
-                                : 'Auto-stacking is paused'}
-                        </p>
-                    </div>
-                </div>
-
+            <div className="px-4 pt-5 pb-6 space-y-5 animate-fade-in">
                 {/* AI Recommendation banner */}
                 {recommendation && (
                     <div className={`ios-card p-4 flex gap-3 border ${
@@ -510,7 +483,7 @@ export default function DeFiPage() {
                     }`}>
                         <Sparkles className={`w-5 h-5 mt-0.5 shrink-0 ${recommendation.action === 'ENTER' ? 'text-primary' : 'text-[var(--warning)]'}`} />
                         <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-1">
+                            <div className="flex items-center gap-2 mb-1.5">
                                 <span className={`text-sm font-semibold ${recommendation.action === 'ENTER' ? 'text-primary' : 'text-[var(--warning)]'}`}>
                                     {recommendation.action === 'ENTER'
                                         ? `AI Pick: ${DEFI_PROTOCOLS.find(p => p.id === recommendation.protocolId)?.name}`
@@ -524,7 +497,7 @@ export default function DeFiPage() {
                 )}
 
                 {/* Protocol list */}
-                <div className="space-y-2">
+                <div className="space-y-3">
                     {DEFI_PROTOCOLS.map(proto => {
                         const risk        = RISK_STYLE[proto.risk];
                         const isSelected  = selectedId === proto.id;
@@ -543,7 +516,7 @@ export default function DeFiPage() {
                                         if (!isSelected) setExecState(IDLE_STATE);
                                     }}
                                 >
-                                    <span className="text-2xl">{proto.icon}</span>
+                                    <span className="text-2xl shrink-0">{proto.icon}</span>
                                     <div className="flex-1 min-w-0">
                                         <div className="flex items-center gap-2 flex-wrap">
                                             <span className="font-semibold">{proto.name}</span>
@@ -552,7 +525,7 @@ export default function DeFiPage() {
                                             )}
                                             <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${risk.cls}`}>{risk.label}</span>
                                         </div>
-                                        <div className="flex items-center gap-3 mt-0.5">
+                                        <div className="flex items-center gap-3 mt-1">
                                             <span className="text-sm text-muted-foreground">{proto.depositAsset}</span>
                                             <span className="text-xs text-muted-foreground">TVL {proto.tvl}</span>
                                             {hasToken && (
@@ -563,29 +536,29 @@ export default function DeFiPage() {
                                         </div>
                                     </div>
                                     <div className="text-right shrink-0">
-                                        <p className="text-lg font-bold text-[var(--success)]">{proto.apy}%</p>
-                                        <p className="text-xs text-muted-foreground">APY</p>
+                                        <p className="text-lg font-bold text-[var(--success)] leading-none">{proto.apy}%</p>
+                                        <p className="text-xs text-muted-foreground mt-0.5">APY</p>
                                     </div>
-                                    <ChevronRight className={`w-4 h-4 text-muted-foreground transition-transform ${isSelected ? 'rotate-90' : ''}`} />
+                                    <ChevronRight className={`w-4 h-4 text-muted-foreground transition-transform shrink-0 ${isSelected ? 'rotate-90' : ''}`} />
                                 </button>
 
                                 {/* Expanded panel */}
                                 {isSelected && (
-                                    <div className="px-4 pb-4 border-t border-border pt-3 space-y-4">
+                                    <div className="px-4 py-4 border-t border-border space-y-5">
                                         <p className="text-xs text-muted-foreground leading-relaxed">{proto.desc}</p>
 
                                         {/* 2-step flow diagram */}
                                         <div className="flex items-center gap-2 text-xs">
-                                            <div className={`flex-1 rounded-lg p-2 text-center font-medium ${!useOwnToken ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground line-through'}`}>
-                                                Step 1<br />
-                                                <span className="font-normal">USDC → {proto.depositAsset}</span><br />
-                                                <span className="opacity-70">via LiFi</span>
+                                            <div className={`flex-1 rounded-lg px-2 py-2.5 text-center font-medium space-y-0.5 ${!useOwnToken ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground line-through'}`}>
+                                                <p>Step 1</p>
+                                                <p className="font-normal">USDC → {proto.depositAsset}</p>
+                                                <p className="opacity-70">via LiFi</p>
                                             </div>
                                             <ArrowRight className="w-4 h-4 text-muted-foreground shrink-0" />
-                                            <div className={`flex-1 rounded-lg p-2 text-center font-medium ${proto.contractAddress ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'}`}>
-                                                Step 2<br />
-                                                <span className="font-normal">{proto.depositAsset} → Vault</span><br />
-                                                <span className="opacity-70">{proto.contractAddress ? 'on-chain' : 'via website'}</span>
+                                            <div className={`flex-1 rounded-lg px-2 py-2.5 text-center font-medium space-y-0.5 ${proto.contractAddress ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'}`}>
+                                                <p>Step 2</p>
+                                                <p className="font-normal">{proto.depositAsset} → Vault</p>
+                                                <p className="opacity-70">{proto.contractAddress ? 'on-chain' : 'via website'}</p>
                                             </div>
                                         </div>
 

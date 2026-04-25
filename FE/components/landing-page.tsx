@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 
 export default function LandingPage() {
     const { login, authenticated, ready } = usePrivy();
@@ -54,14 +55,13 @@ export default function LandingPage() {
             <header className="sticky top-0 z-50 backdrop-blur-lg bg-background/70 border-b border-border">
                 <div className="mx-auto max-w-[var(--content-desktop)] px-4 md:px-8 py-3 flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                        <span
-                            className="golda-mark"
-                            style={
-                                {
-                                    ['--mark-w' as string]: '52px',
-                                    ['--mark-h' as string]: '32px',
-                                } as React.CSSProperties
-                            }
+                        <Image
+                            src="/Icon.png"
+                            alt=""
+                            width={60}
+                            height={32}
+                            priority
+                            className="h-8 w-auto select-none"
                         />
                         <span className="text-title-3">GoldaFinance</span>
                     </div>
