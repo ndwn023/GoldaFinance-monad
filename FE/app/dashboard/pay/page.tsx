@@ -36,6 +36,7 @@ import {
     ArrowRight,
     Coins,
 } from 'lucide-react';
+import { DetailPageSkeleton } from '@/components/skeleton';
 
 // ─── AI analysis ─────────────────────────────────────────────────────────────
 
@@ -87,6 +88,48 @@ Analyse risk-adjusted yield and recommend ONE protocol. Respond ONLY in valid JS
     };
 }
 
+// ─── History / Settings ──────────────────────────────────────────────────────
+
+const HISTORY_KEY = 'golda_defi_history';
+
+interface StackRecord {
+    id: string;
+    protocolId: string;
+    amountUSD: number;
+    shares: number;
+    txHash: string;
+    timestamp: number;
+}
+
+interface StackSettings {
+    enabled: boolean;
+    frequency: 'daily' | 'weekly' | 'monthly';
+    amountPerStack: number;
+}
+
+function formatUSD(n: number): string {
+    return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function labelFor(freq: string): string {
+    return ({ daily: 'Daily', weekly: 'Weekly', monthly: 'Monthly' } as Record<string, string>)[freq] ?? freq;
+}
+
+function StatusPill({ status }: { status: string }) {
+    if (status === 'idle') return null;
+    const styles: Record<string, string> = {
+        done:       'bg-[var(--success)]/10 text-[var(--success)]',
+        error:      'bg-destructive/10 text-destructive',
+        swapping:   'bg-primary/10 text-primary',
+        depositing: 'bg-primary/10 text-primary',
+    };
+    return (
+        <span className={`text-xs px-2 py-1 rounded-full font-medium ${styles[status] ?? 'bg-muted text-muted-foreground'}`}>
+            {status}
+        </span>
+    );
+}
+
 // ─── Style maps ──────────────────────────────────────────────────────────────
 
 const RISK_STYLE = {
@@ -130,10 +173,24 @@ export default function DeFiPage() {
     const [recommendation, setRecommendation] = useState<DeFiRecommendation | null>(null);
     const [autoRunning, setAutoRunning] = useState(false);
 
+    const [history, setHistory] = useState<StackRecord[]>(() => {
+        if (typeof window === 'undefined') return [];
+        try {
+            const raw = localStorage.getItem(HISTORY_KEY);
+            return raw ? (JSON.parse(raw) as StackRecord[]) : [];
+        } catch { return []; }
+    });
+    const [settings] = useState<StackSettings>({ enabled: false, frequency: 'weekly', amountPerStack: 10 });
+
     const walletAddress = user?.wallet?.address;
     const activeWallet  = wallets.find(w => w.walletClientType === 'privy') || wallets[0];
     const selected      = DEFI_PROTOCOLS.find(p => p.id === selectedId) ?? null;
     const parsedAmount  = parseFloat(amount) || 0;
+
+    const totalStacked = history.reduce((sum, h) => sum + h.amountUSD, 0);
+    const totalShares  = history.reduce((sum, h) => sum + h.shares, 0);
+    const countdown    = settings.enabled ? '—' : '—';
+    const status       = execState.phase;
 
     const tokenBalance = (proto: DeFiProtocol) =>
         proto.depositAsset === 'XAUt0' ? xautBalance : wbtcBalance;
