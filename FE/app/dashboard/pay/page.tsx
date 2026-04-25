@@ -1,126 +1,144 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { usePrivy } from '@privy-io/react-auth';
+import { usePrivy, useWallets } from '@privy-io/react-auth';
+import { ethers } from 'ethers';
 import { MobileLayout } from '@/components/mobile-layout';
-import { DetailPageSkeleton } from '@/components/skeleton';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { useGoldaVault } from '@/lib/hooks/useAureoContract';
-import { EXPLORER_URL } from '@/lib/services/contractService';
+import { GoogleGenerativeAI } from '@google/generative-ai';
+import {
+    getMonadSwapQuote,
+    executeMonadSwap,
+    MONAD_TOKENS,
+    MONAD_CHAIN_ID,
+} from '@/lib/services/lifiService';
+import { addSwapRecord } from '@/lib/services/swapHistory';
+import { getUserBalances } from '@/lib/services/contractService';
+import { EXPLORER_URL, CHAIN_ID, RPC_URL } from '@/lib/services/contractService';
+import { MONAD_MAINNET } from '@/lib/types';
+import {
+    DEFI_PROTOCOLS,
+    depositToProtocol,
+    type DeFiProtocol,
+} from '@/lib/services/defiProtocolService';
 import {
     ArrowLeft,
-    Sparkles,
-    Brain,
-    Calendar,
-    Clock,
-    DollarSign,
     Zap,
-    Power,
+    Brain,
+    CheckCircle2,
     AlertCircle,
     Loader2,
-    CheckCircle2,
     ExternalLink,
+    ChevronRight,
+    Sparkles,
     TrendingUp,
+    ArrowRight,
+    Coins,
 } from 'lucide-react';
 
-// ============================================================================
-// Stack Agent — auto-deposit (DCA) USDC into the Golda Vault on a schedule.
-// ============================================================================
+// ─── AI analysis ─────────────────────────────────────────────────────────────
 
-type StackFrequency = 'daily' | 'weekly' | 'idle';
-
-interface StackSettings {
-    enabled: boolean;
-    frequency: StackFrequency;
-    amountPerStack: number;
-    /** For 'idle' mode: trigger when liquid USDC balance >= this. */
-    idleThreshold: number;
-    lastStackAt: number | null;
+interface DeFiRecommendation {
+    protocolId: string;
+    reason: string;
+    confidence: number;
+    action: 'ENTER' | 'WAIT';
 }
 
-interface StackEntry {
-    id: string;
-    amount: number;
-    sharesEarned: number;
-    timestamp: number;
-    txHash: string;
-    trigger: 'manual' | 'scheduled';
-}
-
-const SETTINGS_KEY = 'golda_stack_agent_v1';
-const HISTORY_KEY = 'golda_stack_history_v1';
-
-const DEFAULT_SETTINGS: StackSettings = {
-    enabled: false,
-    frequency: 'weekly',
-    amountPerStack: 25,
-    idleThreshold: 100,
-    lastStackAt: null,
-};
-
-const FREQ_MS: Record<StackFrequency, number> = {
-    daily: 24 * 60 * 60 * 1000,
-    weekly: 7 * 24 * 60 * 60 * 1000,
-    idle: 0,
-};
-
-function formatUSD(n: number) {
-    return n.toLocaleString('en-US', {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
+async function analyzeDeFi(usdcBalance: number, xautBalance: number, wbtcBalance: number): Promise<DeFiRecommendation> {
+    const genAI = new GoogleGenerativeAI(
+        process.env.NEXT_PUBLIC_GEMINI_API_KEY || ''
+    );
+    const model = genAI.getGenerativeModel({
+        model: 'gemini-2.5-flash',
+        generationConfig: { temperature: 0.7, maxOutputTokens: 512 },
     });
+
+    const prompt = `You are a DeFi yield advisor. User balances on Monad mainnet:
+- USDC: $${usdcBalance.toFixed(2)}
+- XAUt0 (tokenised gold): ${xautBalance.toFixed(6)}
+- WBTC: ${wbtcBalance.toFixed(8)}
+
+Available DeFi protocols:
+${DEFI_PROTOCOLS.map(p => `- ${p.name} (id: ${p.id}): APY ${p.apy}%, risk: ${p.risk}, deposit: ${p.depositAsset}, TVL: ${p.tvl}`).join('\n')}
+
+Flow: user swaps USDC → target asset (XAUt0 or WBTC) via LiFi if needed, then deposits into the protocol vault.
+If user already holds the target asset, they skip the swap.
+
+Analyse risk-adjusted yield and recommend ONE protocol. Respond ONLY in valid JSON (no markdown):
+{
+  "protocolId": "<one of: kuru-xaut|neverland-xaut|ambient-wbtc|morpho-wbtc>",
+  "reason": "<1-2 sentence explanation>",
+  "confidence": <50-95>,
+  "action": "ENTER" or "WAIT"
+}`;
+
+    const result = await model.generateContent(prompt);
+    const text = result.response.text();
+    const match = text.match(/\{[\s\S]*\}/);
+    if (!match) throw new Error('No JSON in AI response');
+    const rec = JSON.parse(match[0]) as DeFiRecommendation;
+    return {
+        protocolId: DEFI_PROTOCOLS.find(p => p.id === rec.protocolId) ? rec.protocolId : DEFI_PROTOCOLS[0].id,
+        reason: rec.reason ?? '',
+        confidence: Math.min(95, Math.max(50, rec.confidence ?? 70)),
+        action: rec.action === 'WAIT' ? 'WAIT' : 'ENTER',
+    };
 }
 
-function formatCountdown(ms: number) {
-    if (ms <= 0) return 'Ready';
-    const totalSec = Math.floor(ms / 1000);
-    const days = Math.floor(totalSec / 86400);
-    const hours = Math.floor((totalSec % 86400) / 3600);
-    const mins = Math.floor((totalSec % 3600) / 60);
-    if (days > 0) return `${days}d ${hours}h`;
-    if (hours > 0) return `${hours}h ${mins}m`;
-    if (mins > 0) return `${mins}m`;
-    return 'Now';
+// ─── Style maps ──────────────────────────────────────────────────────────────
+
+const RISK_STYLE = {
+    low:    { cls: 'bg-info-soft text-[var(--info)]',       label: 'Low Risk' },
+    medium: { cls: 'bg-warning-soft text-[var(--warning)]', label: 'Med Risk' },
+    high:   { cls: 'bg-destructive/10 text-destructive',    label: 'High Risk' },
+};
+
+// ─── Per-protocol execution state ────────────────────────────────────────────
+
+interface ExecState {
+    phase: 'idle' | 'swapping' | 'depositing' | 'done' | 'error';
+    step1Hash: string | null;
+    step2Hash: string | null;
+    error: string | null;
 }
 
-export default function StackAgentPage() {
+const IDLE_STATE: ExecState = { phase: 'idle', step1Hash: null, step2Hash: null, error: null };
+
+// ─── Page ────────────────────────────────────────────────────────────────────
+
+export default function DeFiPage() {
     const router = useRouter();
-    const { ready, authenticated } = usePrivy();
-    const { balances, deposit, walletAddress, fetchBalances } = useGoldaVault();
+    const { ready, authenticated, user } = usePrivy();
+    const { wallets } = useWallets();
 
-    const [settings, setSettings] = useState<StackSettings>(DEFAULT_SETTINGS);
-    const [draft, setDraft] = useState<StackSettings>(DEFAULT_SETTINGS);
-    const [history, setHistory] = useState<StackEntry[]>([]);
-    const [now, setNow] = useState<number>(() => Date.now());
-    const [stacking, setStacking] = useState(false);
-    const [error, setError] = useState('');
-    const [feedback, setFeedback] = useState<{ message: string; tone: 'success' | 'error' } | null>(null);
-    const stackingRef = useRef(false);
+    const [usdcBalance, setUsdcBalance] = useState(0);
+    const [xautBalance, setXautBalance] = useState(0);
+    const [wbtcBalance, setWbtcBalance] = useState(0);
 
-    // ---- Persist hydration ---------------------------------------------------
-    useEffect(() => {
-        if (typeof window === 'undefined') return;
-        try {
-            const s = window.localStorage.getItem(SETTINGS_KEY);
-            if (s) {
-                const parsed = { ...DEFAULT_SETTINGS, ...JSON.parse(s) } as StackSettings;
-                setSettings(parsed);
-                setDraft(parsed);
-            }
-            const h = window.localStorage.getItem(HISTORY_KEY);
-            if (h) setHistory(JSON.parse(h));
-        } catch {
-            /* ignore parse errors */
-        }
-    }, []);
+    const [selectedId, setSelectedId] = useState<string | null>(null);
+    const [amount, setAmount]         = useState('');
+    const [useOwnToken, setUseOwnToken] = useState(false); // skip swap if user has token
 
-    useEffect(() => {
-        if (typeof window === 'undefined') return;
-        window.localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
-    }, [settings]);
+    const [quote, setQuote]           = useState<Awaited<ReturnType<typeof getMonadSwapQuote>>>(null);
+    const [quoteLoading, setQuoteLoading] = useState(false);
 
+    const [execState, setExecState]   = useState<ExecState>(IDLE_STATE);
+
+    const [analyzing, setAnalyzing]   = useState(false);
+    const [recommendation, setRecommendation] = useState<DeFiRecommendation | null>(null);
+    const [autoRunning, setAutoRunning] = useState(false);
+
+    const walletAddress = user?.wallet?.address;
+    const activeWallet  = wallets.find(w => w.walletClientType === 'privy') || wallets[0];
+    const selected      = DEFI_PROTOCOLS.find(p => p.id === selectedId) ?? null;
+    const parsedAmount  = parseFloat(amount) || 0;
+
+    const tokenBalance = (proto: DeFiProtocol) =>
+        proto.depositAsset === 'XAUt0' ? xautBalance : wbtcBalance;
+
+    // Redirect if not authed
     useEffect(() => {
         if (typeof window === 'undefined') return;
         window.localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
@@ -131,154 +149,206 @@ export default function StackAgentPage() {
         if (ready && !authenticated) router.push('/');
     }, [ready, authenticated, router]);
 
-    // ---- Tick the clock every 30s for countdowns -----------------------------
+    // Load balances
+    const refreshBalances = useCallback(() => {
+        if (!walletAddress) return;
+        getUserBalances(walletAddress).then(b => {
+            setUsdcBalance(b.usdc);
+            setXautBalance(b.xaut);
+            setWbtcBalance(b.wbtc);
+        }).catch(() => {});
+    }, [walletAddress]);
+
+    useEffect(() => { refreshBalances(); }, [refreshBalances]);
+
+    // When protocol changes, decide whether to default to "own token" mode
     useEffect(() => {
-        const id = setInterval(() => setNow(Date.now()), 30_000);
-        return () => clearInterval(id);
-    }, []);
+        if (!selected) return;
+        const bal = tokenBalance(selected);
+        setUseOwnToken(bal > 0.000001);
+        setAmount('');
+        setQuote(null);
+        setExecState(IDLE_STATE);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [selectedId]);
 
-    // ---- Auto-feedback timeout -----------------------------------------------
+    // LiFi quote (only when swapping USDC → target)
     useEffect(() => {
-        if (!feedback) return;
-        const id = setTimeout(() => setFeedback(null), 4000);
-        return () => clearTimeout(id);
-    }, [feedback]);
-
-    // ---- Derived stats -------------------------------------------------------
-    const totalStacked = useMemo(
-        () => history.reduce((sum, h) => sum + h.amount, 0),
-        [history],
-    );
-    const totalShares = useMemo(
-        () => history.reduce((sum, h) => sum + h.sharesEarned, 0),
-        [history],
-    );
-    const stacksThisWeek = useMemo(() => {
-        const cutoff = now - 7 * 86_400_000;
-        return history.filter(h => h.timestamp >= cutoff).length;
-    }, [history, now]);
-
-    const nextStackAt = useMemo<number | null>(() => {
-        if (!settings.enabled) return null;
-        if (settings.frequency === 'idle') {
-            return balances.usdc >= settings.idleThreshold ? now : null;
+        if (!selected || useOwnToken || parsedAmount <= 0 || !walletAddress) {
+            setQuote(null);
+            return;
         }
-        const interval = FREQ_MS[settings.frequency];
-        return (settings.lastStackAt ?? now) + interval;
-    }, [settings, now, balances.usdc]);
+        let cancelled = false;
+        setQuoteLoading(true);
 
-    const countdown = useMemo(() => {
-        if (!settings.enabled) return 'Paused';
-        if (settings.frequency === 'idle') {
-            return balances.usdc >= settings.idleThreshold
-                ? 'Ready'
-                : `Waiting ($${formatUSD(settings.idleThreshold - balances.usdc)} to go)`;
-        }
-        return nextStackAt ? formatCountdown(nextStackAt - now) : '—';
-    }, [settings, balances.usdc, nextStackAt, now]);
-
-    const status: 'active' | 'paused' | 'setup' = useMemo(() => {
-        if (!settings.enabled) return 'paused';
-        if (settings.amountPerStack <= 0) return 'setup';
-        return 'active';
-    }, [settings.enabled, settings.amountPerStack]);
-
-    // ---- Core stack runner ---------------------------------------------------
-    const runStack = useCallback(
-        async (amount: number, trigger: 'manual' | 'scheduled') => {
-            if (stackingRef.current) return;
-            if (amount <= 0) {
-                setError('Amount must be greater than zero.');
-                return;
-            }
-            if (amount > balances.usdc) {
-                setError(`Insufficient USDC — wallet has $${formatUSD(balances.usdc)}.`);
-                return;
-            }
-            stackingRef.current = true;
-            setStacking(true);
-            setError('');
+        const handle = setTimeout(async () => {
             try {
-                const sharePriceBefore = balances.sharePrice || 1;
-                const result = await deposit(amount);
-                if (!result.success) {
-                    throw new Error(result.error ?? 'Deposit failed');
-                }
-                const sharesEarned = sharePriceBefore > 0 ? amount / sharePriceBefore : 0;
-                const entry: StackEntry = {
-                    id: result.txHash ?? `${Date.now()}`,
-                    amount,
-                    sharesEarned,
-                    timestamp: Date.now(),
-                    txHash: result.txHash ?? '',
-                    trigger,
-                };
-                setHistory(prev => [entry, ...prev].slice(0, 50));
-                setSettings(prev => ({ ...prev, lastStackAt: Date.now() }));
-                setFeedback({
-                    message:
-                        trigger === 'manual'
-                            ? `Stacked $${formatUSD(amount)} into the vault.`
-                            : `Auto-stack ran: $${formatUSD(amount)} deposited.`,
-                    tone: 'success',
+                const fromAmount = ethers.parseUnits(parsedAmount.toFixed(6), 6).toString();
+                const q = await getMonadSwapQuote({
+                    fromToken: MONAD_TOKENS.USDC.address,
+                    toToken:   selected.depositToken.address,
+                    fromAmount,
+                    fromAddress: walletAddress,
                 });
-                await fetchBalances();
-            } catch (err) {
-                const msg = err instanceof Error ? err.message : 'Stack failed';
-                setError(msg);
-                setFeedback({ message: msg, tone: 'error' });
-            } finally {
-                stackingRef.current = false;
-                setStacking(false);
+                if (!cancelled) { setQuote(q); setQuoteLoading(false); }
+            } catch {
+                if (!cancelled) { setQuote(null); setQuoteLoading(false); }
             }
-        },
-        [balances.usdc, balances.sharePrice, deposit, fetchBalances],
-    );
+        }, 600);
 
-    // ---- Auto-stack scheduler (runs while page is open) ----------------------
-    useEffect(() => {
-        if (!settings.enabled || !ready || !authenticated) return;
-        if (settings.amountPerStack <= 0) return;
-        if (stackingRef.current) return;
+        return () => { cancelled = true; clearTimeout(handle); setQuoteLoading(false); };
+    }, [selected, useOwnToken, parsedAmount, walletAddress]);
 
-        const due =
-            settings.frequency === 'idle'
-                ? balances.usdc >= settings.idleThreshold
-                : nextStackAt !== null && nextStackAt <= now;
+    // Signer with chain switch
+    const getSigner = useCallback(async (): Promise<ethers.Signer> => {
+        if (!activeWallet) throw new Error('No wallet connected');
+        const provider = await activeWallet.getEthereumProvider();
+        const chainIdHex = `0x${CHAIN_ID.toString(16)}`;
+        try {
+            const cur = await provider.request({ method: 'eth_chainId' });
+            if (cur !== chainIdHex) {
+                await provider.request({
+                    method: 'wallet_switchEthereumChain',
+                    params: [{ chainId: chainIdHex }],
+                }).catch(async (e: { code?: number }) => {
+                    if (e?.code === 4902) {
+                        await provider.request({
+                            method: 'wallet_addEthereumChain',
+                            params: [{
+                                chainId: chainIdHex,
+                                chainName: MONAD_MAINNET.name,
+                                nativeCurrency: MONAD_MAINNET.nativeCurrency,
+                                rpcUrls: [RPC_URL],
+                                blockExplorerUrls: [EXPLORER_URL],
+                            }],
+                        });
+                    }
+                });
+            }
+        } catch { /* ignore */ }
+        return new ethers.BrowserProvider(provider).getSigner();
+    }, [activeWallet]);
 
-        if (!due) return;
-        if (balances.usdc < settings.amountPerStack) return;
+    // ── Main execution: swap (optional) + deposit ──────────────────────────
+    const handleStakeAndDeposit = useCallback(async (proto: DeFiProtocol) => {
+        if (parsedAmount <= 0) return;
+        setExecState(IDLE_STATE);
 
-        runStack(settings.amountPerStack, 'scheduled');
-    }, [
-        settings.enabled,
-        settings.frequency,
-        settings.amountPerStack,
-        settings.idleThreshold,
-        nextStackAt,
-        now,
-        balances.usdc,
-        ready,
-        authenticated,
-        runStack,
-    ]);
+        const signer = await getSigner();
+        const owner  = walletAddress!;
 
-    // ---- Handlers ------------------------------------------------------------
-    const settingsDirty = useMemo(
-        () =>
-            draft.frequency !== settings.frequency ||
-            draft.amountPerStack !== settings.amountPerStack ||
-            draft.idleThreshold !== settings.idleThreshold,
-        [draft, settings],
-    );
+        let acquiredAmount: bigint;
+        let step1Hash: string | null = null;
 
-    const saveSettings = () => {
-        setSettings(prev => ({ ...prev, ...draft }));
-        setFeedback({ message: 'Schedule saved.', tone: 'success' });
+        if (!useOwnToken) {
+            // ── Step 1: Swap USDC → target asset via LiFi ─────────────────
+            setExecState(s => ({ ...s, phase: 'swapping' }));
+
+            const fromAmountRaw = ethers.parseUnits(parsedAmount.toFixed(6), 6).toString();
+            const q = quote ?? await getMonadSwapQuote({
+                fromToken:   MONAD_TOKENS.USDC.address,
+                toToken:     proto.depositToken.address,
+                fromAmount:  fromAmountRaw,
+                fromAddress: owner,
+            });
+            if (!q) throw new Error('No LiFi quote available');
+
+            const swapResult = await executeMonadSwap(signer, q);
+            step1Hash = swapResult.txHash;
+
+            addSwapRecord({
+                id:              `defi-swap-${Date.now()}`,
+                fromToken:       MONAD_TOKENS.USDC.address,
+                fromTokenSymbol: 'USDC',
+                toToken:         proto.depositToken.address,
+                toTokenSymbol:   proto.depositToken.symbol,
+                fromAmount:      fromAmountRaw,
+                fromAmountHuman: parsedAmount,
+                toAmount:        q.toAmount,
+                toAmountHuman:   Number(ethers.formatUnits(q.toAmount, proto.depositToken.decimals)),
+                txHash:          step1Hash,
+                toolUsed:        `${proto.name} via LiFi`,
+                timestamp:       Date.now(),
+                status:          'completed',
+            });
+
+            acquiredAmount = BigInt(q.toAmount);
+            setExecState(s => ({ ...s, phase: 'depositing', step1Hash }));
+        } else {
+            // User already holds the target asset — skip swap
+            acquiredAmount = ethers.parseUnits(parsedAmount.toFixed(proto.depositToken.decimals), proto.depositToken.decimals);
+            setExecState(s => ({ ...s, phase: 'depositing' }));
+        }
+
+        // ── Step 2: Deposit into protocol vault ────────────────────────────
+        let step2Hash: string | null = null;
+
+        if (proto.contractAddress) {
+            const result = await depositToProtocol(signer, proto, acquiredAmount);
+            step2Hash = result.txHash;
+        }
+        // If contractAddress is null, we skip the on-chain deposit.
+        // The UI will show the website link so the user can do it manually.
+
+        setExecState({ phase: 'done', step1Hash, step2Hash, error: null });
+        refreshBalances();
+    }, [getSigner, parsedAmount, quote, useOwnToken, walletAddress, refreshBalances]);
+
+    const handleExecute = useCallback(async (proto: DeFiProtocol) => {
+        try {
+            await handleStakeAndDeposit(proto);
+        } catch (err) {
+            setExecState(s => ({
+                ...s,
+                phase: 'error',
+                error: err instanceof Error ? err.message : 'Transaction failed',
+            }));
+        }
+    }, [handleStakeAndDeposit]);
+
+    // AI analysis
+    const handleAnalyze = async () => {
+        setAnalyzing(true);
+        setRecommendation(null);
+        try {
+            const rec = await analyzeDeFi(usdcBalance, xautBalance, wbtcBalance);
+            setRecommendation(rec);
+            if (rec.action === 'ENTER') setSelectedId(rec.protocolId);
+        } catch {
+            const fallback = DEFI_PROTOCOLS[0];
+            setRecommendation({ protocolId: fallback.id, reason: 'AI unavailable — showing highest APY.', confidence: 60, action: 'ENTER' });
+            setSelectedId(fallback.id);
+        } finally {
+            setAnalyzing(false);
+        }
     };
 
-    const toggleEnabled = () => {
-        setSettings(prev => ({ ...prev, enabled: !prev.enabled }));
+    // Auto: pick recommended (or highest APY), use 10% of USDC balance
+    const handleAuto = async () => {
+        if (!walletAddress || usdcBalance <= 0) return;
+        setAutoRunning(true);
+        try {
+            const proto = recommendation?.action === 'ENTER'
+                ? (DEFI_PROTOCOLS.find(p => p.id === recommendation.protocolId) ?? DEFI_PROTOCOLS[0])
+                : DEFI_PROTOCOLS[0];
+
+            const autoAmount = Math.max(1, Math.floor(usdcBalance * 0.1 * 100) / 100);
+            setSelectedId(proto.id);
+            setUseOwnToken(false);
+            setAmount(autoAmount.toString());
+
+            // Small delay so state settles, then execute
+            await new Promise(r => setTimeout(r, 100));
+            await handleExecute(proto);
+        } catch (err) {
+            setExecState(s => ({
+                ...s,
+                phase: 'error',
+                error: err instanceof Error ? err.message : 'Auto failed',
+            }));
+        } finally {
+            setAutoRunning(false);
+        }
     };
 
     // ---- Loading state -------------------------------------------------------
@@ -290,27 +360,58 @@ export default function StackAgentPage() {
         );
     }
 
-    const quickAmounts = [10, 25, 50, 100];
+    const isExecuting = execState.phase === 'swapping' || execState.phase === 'depositing';
 
     return (
         <MobileLayout activeTab="pay">
-            {/* Header — matches Swap Agent layout for visual consistency */}
-            <div className="bg-background px-4 pt-safe md:pt-0 pb-6">
-                <div className="flex items-center gap-4 mb-6">
-                    <button
-                        onClick={() => router.push('/dashboard')}
-                        className="p-2 rounded-full bg-muted hover:bg-secondary transition-colors"
-                        aria-label="Back"
-                    >
+            {/* ── Header ─────────────────────────────────────────────────── */}
+            <div className="bg-background sticky top-0 z-40 px-4 pt-12 pb-3 border-b border-border">
+                <div className="flex items-center gap-3 mb-3">
+                    <button onClick={() => router.push('/dashboard')} className="p-2 rounded-full bg-muted hover:bg-secondary transition-colors">
                         <ArrowLeft className="w-5 h-5" />
                     </button>
-                    <div className="flex-1 min-w-0">
-                        <h1 className="text-xl font-semibold truncate">Stack Agent</h1>
-                        <p className="text-sm text-muted-foreground truncate">
-                            Auto-deposit USDC to Golda Vault
-                        </p>
+                    <div className="flex-1">
+                        <h1 className="text-xl font-semibold">DeFi Yield</h1>
+                        {/* Balance row */}
+                        <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5">
+                            <span className="text-xs text-muted-foreground">
+                                USDC <span className="font-medium text-foreground">${usdcBalance.toFixed(2)}</span>
+                            </span>
+                            {xautBalance > 0.000001 && (
+                                <span className="text-xs text-muted-foreground">
+                                    XAUt0 <span className="font-medium text-foreground">{xautBalance.toFixed(4)}</span>
+                                </span>
+                            )}
+                            {wbtcBalance > 0.000001 && (
+                                <span className="text-xs text-muted-foreground">
+                                    WBTC <span className="font-medium text-foreground">{wbtcBalance.toFixed(6)}</span>
+                                </span>
+                            )}
+                        </div>
                     </div>
                     <StatusPill status={status} />
+                </div>
+
+                {/* Action bar */}
+                <div className="flex gap-2">
+                    <button
+                        onClick={handleAnalyze}
+                        disabled={analyzing || autoRunning}
+                        className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-muted hover:bg-secondary text-sm font-medium transition-colors disabled:opacity-50"
+                    >
+                        {analyzing
+                            ? <><Loader2 className="w-4 h-4 animate-spin" /> Analyzing…</>
+                            : <><Brain className="w-4 h-4" /> Analyze</>}
+                    </button>
+                    <button
+                        onClick={handleAuto}
+                        disabled={autoRunning || analyzing || usdcBalance <= 0}
+                        className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-primary text-white text-sm font-semibold transition-colors disabled:opacity-50 active:scale-[0.98]"
+                    >
+                        {autoRunning
+                            ? <><Loader2 className="w-4 h-4 animate-spin" /> Running…</>
+                            : <><Zap className="w-4 h-4" /> Auto</>}
+                    </button>
                 </div>
             </div>
 
@@ -343,377 +444,305 @@ export default function StackAgentPage() {
                     </div>
                 </div>
 
-                {/* Feedback toast (inline) */}
-                {feedback && (
-                    <div
-                        className={`flex items-center gap-2 text-sm p-3 rounded-xl border ${
-                            feedback.tone === 'success'
-                                ? 'bg-success-soft border-[var(--success)]/30 text-[var(--success)]'
-                                : 'bg-destructive-soft border-[var(--destructive)]/30 text-[var(--destructive)]'
-                        }`}
-                    >
-                        {feedback.tone === 'success' ? (
-                            <CheckCircle2 className="w-4 h-4 shrink-0" />
-                        ) : (
-                            <AlertCircle className="w-4 h-4 shrink-0" />
-                        )}
-                        <span className="flex-1">{feedback.message}</span>
+                {/* AI Recommendation banner */}
+                {recommendation && (
+                    <div className={`ios-card p-4 flex gap-3 border ${
+                        recommendation.action === 'ENTER'
+                            ? 'border-primary/30 bg-primary/5'
+                            : 'border-warning/30 bg-warning-soft'
+                    }`}>
+                        <Sparkles className={`w-5 h-5 mt-0.5 shrink-0 ${recommendation.action === 'ENTER' ? 'text-primary' : 'text-[var(--warning)]'}`} />
+                        <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                                <span className={`text-sm font-semibold ${recommendation.action === 'ENTER' ? 'text-primary' : 'text-[var(--warning)]'}`}>
+                                    {recommendation.action === 'ENTER'
+                                        ? `AI Pick: ${DEFI_PROTOCOLS.find(p => p.id === recommendation.protocolId)?.name}`
+                                        : 'AI: Wait for better opportunity'}
+                                </span>
+                                <span className="text-xs text-muted-foreground">{recommendation.confidence}%</span>
+                            </div>
+                            <p className="text-xs text-muted-foreground leading-relaxed">{recommendation.reason}</p>
+                        </div>
                     </div>
                 )}
 
-                {/* AUTO-STACK TOGGLE */}
-                <div className="ios-card-elev p-4 flex items-center justify-between gap-4">
-                    <div className="flex items-center gap-3 min-w-0">
-                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-                            settings.enabled
-                                ? 'bg-[var(--success)] text-white'
-                                : 'bg-surface text-muted-foreground'
-                        }`}>
-                            <Power className="w-5 h-5" />
-                        </div>
-                        <div className="min-w-0">
-                            <h3 className="text-headline truncate">Auto-Stacking</h3>
-                            <p className="text-footnote text-muted-foreground truncate">
-                                {settings.enabled
-                                    ? 'Agent will deposit on schedule'
-                                    : 'Tap to enable autonomous stacking'}
-                            </p>
-                        </div>
-                    </div>
-                    <button
-                        type="button"
-                        onClick={toggleEnabled}
-                        className={`ios-switch ${settings.enabled ? 'on' : ''}`}
-                        aria-pressed={settings.enabled}
-                        aria-label="Toggle auto-stacking"
-                    >
-                        <span className="ios-switch-thumb" />
-                    </button>
-                </div>
+                {/* Protocol list */}
+                <div className="space-y-2">
+                    {DEFI_PROTOCOLS.map(proto => {
+                        const risk        = RISK_STYLE[proto.risk];
+                        const isSelected  = selectedId === proto.id;
+                        const isRec       = recommendation?.protocolId === proto.id && recommendation.action === 'ENTER';
+                        const tokenBal    = tokenBalance(proto);
+                        const hasToken    = tokenBal > 0.000001;
+                        const state       = isSelected ? execState : IDLE_STATE;
 
-                {/* STACK SCHEDULE */}
-                <div className="ios-card-elev p-4 space-y-4">
-                    <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-surface flex items-center justify-center shrink-0">
-                            <Calendar className="w-5 h-5 text-foreground" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                            <h3 className="text-headline">Stack Schedule</h3>
-                            <p className="text-footnote text-muted-foreground">
-                                How often the agent runs
-                            </p>
-                        </div>
-                    </div>
-
-                    {/* Frequency picker */}
-                    <div className="grid grid-cols-3 gap-2">
-                        {(['daily', 'weekly', 'idle'] as const).map(freq => {
-                            const active = draft.frequency === freq;
-                            return (
+                        return (
+                            <div key={proto.id} className={`ios-card overflow-hidden transition-all ${isSelected ? 'ring-2 ring-primary/40' : ''}`}>
+                                {/* Protocol row */}
                                 <button
-                                    key={freq}
-                                    onClick={() =>
-                                        setDraft(prev => ({ ...prev, frequency: freq }))
-                                    }
-                                    className={`btn-haptic rounded-xl border py-3 text-sm font-semibold transition-colors ${
-                                        active
-                                            ? 'border-foreground bg-foreground text-background'
-                                            : 'border-border hover:bg-surface text-foreground'
-                                    }`}
+                                    className="w-full flex items-center gap-3 p-4 hover:bg-muted/40 transition-colors text-left"
+                                    onClick={() => {
+                                        setSelectedId(isSelected ? null : proto.id);
+                                        if (!isSelected) setExecState(IDLE_STATE);
+                                    }}
                                 >
-                                    {labelFor(freq)}
-                                </button>
-                            );
-                        })}
-                    </div>
-
-                    {/* Amount per stack */}
-                    <div className="space-y-2">
-                        <label className="text-footnote text-muted-foreground">
-                            Amount per stack (USDC)
-                        </label>
-                        <div className="relative">
-                            <DollarSign className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                            <Input
-                                type="number"
-                                inputMode="decimal"
-                                value={draft.amountPerStack || ''}
-                                onChange={e =>
-                                    setDraft(prev => ({
-                                        ...prev,
-                                        amountPerStack: parseFloat(e.target.value) || 0,
-                                    }))
-                                }
-                                placeholder="25"
-                                className="pl-12 py-6 text-2xl font-semibold rounded-xl"
-                            />
-                        </div>
-                        <div className="flex gap-2 pt-1">
-                            {quickAmounts.map(amt => (
-                                <button
-                                    key={amt}
-                                    onClick={() =>
-                                        setDraft(prev => ({ ...prev, amountPerStack: amt }))
-                                    }
-                                    className={`btn-haptic flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
-                                        draft.amountPerStack === amt
-                                            ? 'bg-foreground text-background'
-                                            : 'bg-surface hover:bg-surface-2 text-foreground'
-                                    }`}
-                                >
-                                    ${amt}
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-
-                    {/* Idle threshold (only visible in idle mode) */}
-                    {draft.frequency === 'idle' && (
-                        <div className="space-y-2">
-                            <label className="text-footnote text-muted-foreground">
-                                Trigger when wallet USDC ≥
-                            </label>
-                            <div className="relative">
-                                <DollarSign className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                                <Input
-                                    type="number"
-                                    inputMode="decimal"
-                                    value={draft.idleThreshold || ''}
-                                    onChange={e =>
-                                        setDraft(prev => ({
-                                            ...prev,
-                                            idleThreshold: parseFloat(e.target.value) || 0,
-                                        }))
-                                    }
-                                    placeholder="100"
-                                    className="pl-12 py-5 text-lg font-semibold rounded-xl"
-                                />
-                            </div>
-                            <p className="text-[11px] text-muted-foreground">
-                                Agent stacks ${formatUSD(draft.amountPerStack || 0)} whenever your
-                                liquid USDC crosses this threshold.
-                            </p>
-                        </div>
-                    )}
-
-                    {/* Save button (only when dirty) */}
-                    {settingsDirty && (
-                        <Button
-                            onClick={saveSettings}
-                            className="w-full rounded-xl"
-                        >
-                            Save schedule
-                        </Button>
-                    )}
-                </div>
-
-                {/* MANUAL STACK NOW */}
-                <div className="ios-card-elev p-4 space-y-3">
-                    <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-surface flex items-center justify-center shrink-0">
-                            <Zap className="w-5 h-5 text-foreground" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                            <h3 className="text-headline">Stack Now</h3>
-                            <p className="text-footnote text-muted-foreground">
-                                Manual one-shot deposit · ${formatUSD(balances.usdc)} USDC available
-                            </p>
-                        </div>
-                    </div>
-                    <Button
-                        onClick={() => runStack(settings.amountPerStack, 'manual')}
-                        disabled={
-                            stacking ||
-                            settings.amountPerStack <= 0 ||
-                            balances.usdc < settings.amountPerStack
-                        }
-                        className="w-full rounded-xl !h-12 disabled:opacity-50"
-                    >
-                        {stacking ? (
-                            <>
-                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                                Stacking…
-                            </>
-                        ) : (
-                            <>
-                                <Zap className="w-4 h-4 mr-2" />
-                                Stack ${formatUSD(settings.amountPerStack)} now
-                            </>
-                        )}
-                    </Button>
-                    {balances.usdc < settings.amountPerStack && (
-                        <p className="text-[11px] text-[var(--warning)] flex items-center gap-1.5">
-                            <AlertCircle className="w-3.5 h-3.5" />
-                            Wallet balance below the configured stack amount.
-                        </p>
-                    )}
-                    {error && (
-                        <p className="text-[11px] text-[var(--destructive)] flex items-center gap-1.5">
-                            <AlertCircle className="w-3.5 h-3.5" />
-                            {error}
-                        </p>
-                    )}
-                </div>
-
-                {/* STATS GRID */}
-                <div className="grid grid-cols-2 gap-3">
-                    <div className="ios-card p-4">
-                        <p className="section-label mb-1">This Week</p>
-                        <p className="text-title-2 font-num">{stacksThisWeek}</p>
-                        <p className="text-footnote text-muted-foreground">
-                            stack{stacksThisWeek === 1 ? '' : 's'}
-                        </p>
-                    </div>
-                    <div className="ios-card p-4">
-                        <p className="section-label mb-1">Vault Shares Earned</p>
-                        <p className="text-title-2 font-num">{totalShares.toFixed(4)}</p>
-                        <p className="text-footnote text-muted-foreground">gUSDC</p>
-                    </div>
-                </div>
-
-                {/* RECENT ACTIVITY */}
-                <div className="ios-card overflow-hidden">
-                    <div className="p-4 border-b border-border flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                            <div className="w-9 h-9 rounded-xl bg-surface flex items-center justify-center">
-                                <Clock className="w-4 h-4 text-foreground" />
-                            </div>
-                            <h3 className="text-headline">Recent Stacks</h3>
-                        </div>
-                        {history.length > 0 && (
-                            <span className="chip chip-mono text-[10px]">
-                                {history.length} total
-                            </span>
-                        )}
-                    </div>
-                    {history.length === 0 ? (
-                        <div className="p-8 text-center">
-                            <div className="w-12 h-12 mx-auto mb-2 rounded-2xl bg-surface flex items-center justify-center">
-                                <Sparkles className="w-5 h-5 text-muted-foreground" />
-                            </div>
-                            <p className="text-footnote text-muted-foreground">
-                                No stacks yet — enable the agent or stack manually.
-                            </p>
-                        </div>
-                    ) : (
-                        <ul className="divide-y divide-border">
-                            {history.slice(0, 8).map(entry => (
-                                <li key={entry.id} className="p-4 flex items-center gap-3">
-                                    <div
-                                        className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-                                            entry.trigger === 'scheduled'
-                                                ? 'bg-[color-mix(in_srgb,var(--electric-purple)_18%,transparent)] text-[var(--electric-purple)]'
-                                                : 'bg-surface text-foreground'
-                                        }`}
-                                    >
-                                        {entry.trigger === 'scheduled' ? (
-                                            <Brain className="w-5 h-5" />
-                                        ) : (
-                                            <TrendingUp className="w-5 h-5" />
-                                        )}
-                                    </div>
+                                    <span className="text-2xl">{proto.icon}</span>
                                     <div className="flex-1 min-w-0">
-                                        <p className="text-headline truncate">
-                                            ${formatUSD(entry.amount)}
-                                            <span className="text-footnote text-muted-foreground font-normal ml-1.5">
-                                                · {entry.trigger}
-                                            </span>
-                                        </p>
-                                        <p className="text-footnote text-muted-foreground">
-                                            {new Date(entry.timestamp).toLocaleString(undefined, {
-                                                month: 'short',
-                                                day: 'numeric',
-                                                hour: '2-digit',
-                                                minute: '2-digit',
-                                            })}
-                                            {' · '}
-                                            {entry.sharesEarned.toFixed(4)} gUSDC
-                                        </p>
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                            <span className="font-semibold">{proto.name}</span>
+                                            {isRec && (
+                                                <span className="text-xs px-1.5 py-0.5 rounded-full bg-primary text-white font-medium">AI</span>
+                                            )}
+                                            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${risk.cls}`}>{risk.label}</span>
+                                        </div>
+                                        <div className="flex items-center gap-3 mt-0.5">
+                                            <span className="text-sm text-muted-foreground">{proto.depositAsset}</span>
+                                            <span className="text-xs text-muted-foreground">TVL {proto.tvl}</span>
+                                            {hasToken && (
+                                                <span className="text-xs text-[var(--success)] font-medium">
+                                                    Have {tokenBal.toFixed(4)}
+                                                </span>
+                                            )}
+                                        </div>
                                     </div>
-                                    {entry.txHash && (
-                                        <a
-                                            href={`${EXPLORER_URL}/tx/${entry.txHash}`}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="btn-haptic shrink-0 p-2 rounded-full hover:bg-surface text-muted-foreground"
-                                            aria-label="View transaction"
-                                        >
-                                            <ExternalLink className="w-4 h-4" />
-                                        </a>
-                                    )}
-                                </li>
-                            ))}
-                        </ul>
-                    )}
-                </div>
+                                    <div className="text-right shrink-0">
+                                        <p className="text-lg font-bold text-[var(--success)]">{proto.apy}%</p>
+                                        <p className="text-xs text-muted-foreground">APY</p>
+                                    </div>
+                                    <ChevronRight className={`w-4 h-4 text-muted-foreground transition-transform ${isSelected ? 'rotate-90' : ''}`} />
+                                </button>
 
-                {/* HOW IT WORKS */}
-                <div className="ios-card p-4">
-                    <h4 className="text-headline mb-2 flex items-center gap-2">
-                        <Brain className="w-4 h-4 text-[var(--electric-purple)]" />
-                        How Stack Agent works
-                    </h4>
-                    <ul className="space-y-1.5 text-footnote text-muted-foreground list-disc list-inside">
-                        <li>Pick a frequency — daily, weekly, or idle-balance trigger.</li>
-                        <li>Set how much USDC to stack each run.</li>
-                        <li>
-                            Enable the toggle and the agent deposits into your{' '}
-                            <span className="text-foreground font-medium">Golda Vault</span> on
-                            schedule.
-                        </li>
-                        <li>You earn vault shares (gUSDC) backed by gold and BTC.</li>
-                    </ul>
-                    {walletAddress && (
-                        <p className="text-[10px] text-muted-foreground mt-3 font-mono">
-                            agent runs while this page is open · {walletAddress.slice(0, 6)}…{walletAddress.slice(-4)}
-                        </p>
-                    )}
+                                {/* Expanded panel */}
+                                {isSelected && (
+                                    <div className="px-4 pb-4 border-t border-border pt-3 space-y-4">
+                                        <p className="text-xs text-muted-foreground leading-relaxed">{proto.desc}</p>
+
+                                        {/* 2-step flow diagram */}
+                                        <div className="flex items-center gap-2 text-xs">
+                                            <div className={`flex-1 rounded-lg p-2 text-center font-medium ${!useOwnToken ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground line-through'}`}>
+                                                Step 1<br />
+                                                <span className="font-normal">USDC → {proto.depositAsset}</span><br />
+                                                <span className="opacity-70">via LiFi</span>
+                                            </div>
+                                            <ArrowRight className="w-4 h-4 text-muted-foreground shrink-0" />
+                                            <div className={`flex-1 rounded-lg p-2 text-center font-medium ${proto.contractAddress ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'}`}>
+                                                Step 2<br />
+                                                <span className="font-normal">{proto.depositAsset} → Vault</span><br />
+                                                <span className="opacity-70">{proto.contractAddress ? 'on-chain' : 'via website'}</span>
+                                            </div>
+                                        </div>
+
+                                        {/* Skip swap toggle (if user has token) */}
+                                        {hasToken && (
+                                            <div className="flex items-center gap-2 bg-muted rounded-xl p-3">
+                                                <Coins className="w-4 h-4 text-[var(--success)] shrink-0" />
+                                                <p className="text-xs flex-1">
+                                                    You already have <strong>{tokenBal.toFixed(4)} {proto.depositAsset}</strong>
+                                                </p>
+                                                <button
+                                                    onClick={() => { setUseOwnToken(!useOwnToken); setAmount(''); }}
+                                                    className={`text-xs px-2 py-1 rounded-lg font-medium transition-colors ${
+                                                        useOwnToken
+                                                            ? 'bg-primary text-white'
+                                                            : 'bg-background border border-border'
+                                                    }`}
+                                                >
+                                                    {useOwnToken ? 'Use my token' : 'Buy with USDC'}
+                                                </button>
+                                            </div>
+                                        )}
+
+                                        {/* Amount input */}
+                                        <div className="space-y-2">
+                                            <label className="text-sm font-medium">
+                                                {useOwnToken
+                                                    ? `Amount (${proto.depositAsset})`
+                                                    : 'Amount (USDC)'}
+                                            </label>
+                                            <div className="flex gap-2">
+                                                <Input
+                                                    type="number"
+                                                    placeholder="0.00"
+                                                    value={amount}
+                                                    onChange={e => { setAmount(e.target.value); setExecState(IDLE_STATE); }}
+                                                    className="rounded-xl py-5 text-lg font-semibold flex-1"
+                                                    disabled={isExecuting}
+                                                />
+                                                <button
+                                                    onClick={() => setAmount(
+                                                        useOwnToken
+                                                            ? (tokenBal * 0.5).toFixed(6)
+                                                            : (usdcBalance * 0.5).toFixed(2)
+                                                    )}
+                                                    className="px-3 py-2 rounded-xl bg-muted text-xs font-medium hover:bg-secondary transition-colors"
+                                                >50%</button>
+                                                <button
+                                                    onClick={() => setAmount(
+                                                        useOwnToken
+                                                            ? tokenBal.toFixed(6)
+                                                            : usdcBalance.toFixed(2)
+                                                    )}
+                                                    className="px-3 py-2 rounded-xl bg-muted text-xs font-medium hover:bg-secondary transition-colors"
+                                                >Max</button>
+                                            </div>
+                                        </div>
+
+                                        {/* LiFi quote preview (swap step only) */}
+                                        {!useOwnToken && (
+                                            <>
+                                                {quoteLoading && (
+                                                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                                        <Loader2 className="w-4 h-4 animate-spin" /> Getting quote…
+                                                    </div>
+                                                )}
+                                                {quote && !quoteLoading && (
+                                                    <div className="bg-muted rounded-xl p-3 space-y-1 text-sm">
+                                                        <div className="flex justify-between">
+                                                            <span className="text-muted-foreground">Step 1 output</span>
+                                                            <span className="font-semibold">
+                                                                {Number(ethers.formatUnits(quote.toAmount, proto.depositToken.decimals)).toFixed(6)} {proto.depositAsset}
+                                                            </span>
+                                                        </div>
+                                                        <div className="flex justify-between text-xs text-muted-foreground">
+                                                            <span>Via {quote.toolUsed}</span>
+                                                            <span>Fee ${quote.feeUSD.toFixed(4)}</span>
+                                                        </div>
+                                                        <p className="text-xs text-muted-foreground pt-1 border-t border-border">
+                                                            Step 2: {Number(ethers.formatUnits(quote.toAmount, proto.depositToken.decimals)).toFixed(6)} {proto.depositAsset} → {proto.name} vault
+                                                        </p>
+                                                    </div>
+                                                )}
+                                            </>
+                                        )}
+
+                                        {/* Execution progress */}
+                                        {state.phase !== 'idle' && state.phase !== 'error' && (
+                                            <div className="space-y-1.5">
+                                                <StepRow
+                                                    n={1}
+                                                    label={useOwnToken ? 'Skipped (using own token)' : 'Swap USDC → ' + proto.depositAsset}
+                                                    done={state.step1Hash !== null || useOwnToken}
+                                                    active={state.phase === 'swapping'}
+                                                    hash={state.step1Hash}
+                                                    skipped={useOwnToken}
+                                                />
+                                                <StepRow
+                                                    n={2}
+                                                    label={'Deposit ' + proto.depositAsset + ' → ' + proto.name}
+                                                    done={state.step2Hash !== null || (state.phase === 'done' && !proto.contractAddress)}
+                                                    active={state.phase === 'depositing'}
+                                                    hash={state.step2Hash}
+                                                    skipped={false}
+                                                />
+                                            </div>
+                                        )}
+
+                                        {/* Done state */}
+                                        {state.phase === 'done' && (
+                                            <div className="flex items-start gap-2 text-sm bg-success-soft text-[var(--success)] rounded-xl p-3">
+                                                <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
+                                                <div className="flex-1">
+                                                    <p className="font-medium">
+                                                        {proto.contractAddress ? 'Staked successfully!' : 'Swap complete!'}
+                                                    </p>
+                                                    {!proto.contractAddress && (
+                                                        <a
+                                                            href={proto.websiteUrl}
+                                                            target="_blank" rel="noopener noreferrer"
+                                                            className="text-xs flex items-center gap-1 mt-1 hover:underline"
+                                                        >
+                                                            Deposit {proto.depositAsset} at {proto.name}
+                                                            <ExternalLink className="w-3 h-3" />
+                                                        </a>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* Error state */}
+                                        {state.phase === 'error' && (
+                                            <div className="flex items-start gap-2 text-sm bg-destructive/10 text-destructive rounded-xl p-3">
+                                                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                                                <p className="flex-1 break-all">{state.error}</p>
+                                            </div>
+                                        )}
+
+                                        {/* Execute button */}
+                                        <button
+                                            onClick={() => handleExecute(proto)}
+                                            disabled={
+                                                parsedAmount <= 0 ||
+                                                isExecuting ||
+                                                (!useOwnToken && !quote && parsedAmount > 0) ||
+                                                (!useOwnToken && parsedAmount > usdcBalance) ||
+                                                (useOwnToken && parsedAmount > tokenBal)
+                                            }
+                                            className="w-full py-3.5 rounded-2xl font-semibold text-sm flex items-center justify-center gap-2 bg-primary text-white disabled:opacity-50 transition-all active:scale-[0.98]"
+                                        >
+                                            {isExecuting ? (
+                                                <>
+                                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                                    {execState.phase === 'swapping' ? 'Swapping…' : 'Depositing…'}
+                                                </>
+                                            ) : !useOwnToken && !quote && parsedAmount > 0 ? (
+                                                <><Loader2 className="w-4 h-4 animate-spin" /> Getting quote…</>
+                                            ) : !useOwnToken && parsedAmount > usdcBalance ? (
+                                                'Insufficient USDC'
+                                            ) : useOwnToken && parsedAmount > tokenBal ? (
+                                                `Insufficient ${proto.depositAsset}`
+                                            ) : (
+                                                <>
+                                                    <TrendingUp className="w-4 h-4" />
+                                                    {useOwnToken
+                                                        ? `Deposit ${parsedAmount > 0 ? parsedAmount.toFixed(6) : '0'} ${proto.depositAsset}`
+                                                        : `Swap + Stake $${parsedAmount > 0 ? parsedAmount.toFixed(2) : '0'} → ${proto.depositAsset}`}
+                                                </>
+                                            )}
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })}
                 </div>
             </div>
         </MobileLayout>
     );
 }
 
-// ============================================================================
-// Helpers
-// ============================================================================
+// ─── Step progress row ────────────────────────────────────────────────────────
 
-function labelFor(freq: StackFrequency) {
-    switch (freq) {
-        case 'daily':
-            return 'Daily';
-        case 'weekly':
-            return 'Weekly';
-        case 'idle':
-            return 'Idle balance';
-    }
-}
-
-function StatusPill({ status }: { status: 'active' | 'paused' | 'setup' }) {
-    const cfg = {
-        active: {
-            bg: 'bg-success-soft',
-            text: 'text-[var(--success)]',
-            dot: 'bg-[var(--success)]',
-            label: 'Active',
-        },
-        paused: {
-            bg: 'bg-muted',
-            text: 'text-muted-foreground',
-            dot: 'bg-muted-foreground',
-            label: 'Paused',
-        },
-        setup: {
-            bg: 'bg-warning-soft',
-            text: 'text-[var(--warning)]',
-            dot: 'bg-[var(--warning)]',
-            label: 'Setup',
-        },
-    }[status];
+function StepRow({
+    n, label, done, active, hash, skipped,
+}: {
+    n: number;
+    label: string;
+    done: boolean;
+    active: boolean;
+    hash: string | null;
+    skipped: boolean;
+}) {
     return (
-        <div className={`flex items-center gap-1 px-3 py-1.5 rounded-full shrink-0 ${cfg.bg}`}>
-            <div className={`w-2 h-2 rounded-full animate-pulse ${cfg.dot}`} />
-            <span className={`text-xs font-medium ${cfg.text}`}>{cfg.label}</span>
+        <div className={`flex items-center gap-2 text-xs ${skipped ? 'opacity-40' : ''}`}>
+            <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 font-bold text-[10px] ${
+                done    ? 'bg-[var(--success)] text-white' :
+                active  ? 'bg-primary text-white' :
+                          'bg-muted text-muted-foreground'
+            }`}>
+                {done ? '✓' : active ? <Loader2 className="w-3 h-3 animate-spin" /> : n}
+            </div>
+            <span className={`flex-1 ${done ? 'text-[var(--success)]' : active ? 'text-foreground' : 'text-muted-foreground'}`}>
+                {label}
+            </span>
+            {hash && (
+                <a
+                    href={`${EXPLORER_URL}/tx/${hash}`}
+                    target="_blank" rel="noopener noreferrer"
+                    className="flex items-center gap-0.5 text-muted-foreground hover:text-foreground"
+                >
+                    {hash.slice(0, 6)}…<ExternalLink className="w-2.5 h-2.5" />
+                </a>
+            )}
         </div>
     );
 }
