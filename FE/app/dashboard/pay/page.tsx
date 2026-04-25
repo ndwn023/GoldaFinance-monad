@@ -1,178 +1,343 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { usePrivy } from '@privy-io/react-auth';
+import { usePrivy, useWallets } from '@privy-io/react-auth';
+import { ethers } from 'ethers';
 import { MobileLayout } from '@/components/mobile-layout';
+import { Input } from '@/components/ui/input';
+import { GoogleGenerativeAI } from '@google/generative-ai';
+import {
+    getMonadSwapQuote,
+    executeMonadSwap,
+    MONAD_TOKENS,
+    MONAD_CHAIN_ID,
+} from '@/lib/services/lifiService';
+import { addSwapRecord } from '@/lib/services/swapHistory';
+import { getUserBalances } from '@/lib/services/contractService';
+import { EXPLORER_URL, CHAIN_ID, RPC_URL } from '@/lib/services/contractService';
+import { MONAD_MAINNET } from '@/lib/types';
 import {
     ArrowLeft,
-    Layers,
-    TrendingUp,
-    Shield,
-    Power,
-    Save,
-    BarChart3,
+    Zap,
+    Brain,
     CheckCircle2,
     AlertCircle,
     Loader2,
-    Info,
-    ChevronDown,
-    ChevronUp,
+    ExternalLink,
+    ChevronRight,
+    Sparkles,
+    TrendingUp,
 } from 'lucide-react';
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+// ─── Protocol definitions ─────────────────────────────────────────────────────
 
-interface DeFiProtocol {
+interface Protocol {
     id: string;
     name: string;
     icon: string;
-    description: string;
-    apy: string;
-    apyNum: number;
+    apy: number;
     risk: 'low' | 'medium' | 'high';
+    assets: string[];
+    desc: string;
     tvl: string;
-    strategy: string;
-    color: string;
+    toToken: string;         // token address to swap USDC into
+    toSymbol: string;        // human label
+    toDecimals: number;
 }
 
-type RebalanceFreq = 'daily' | 'weekly' | 'monthly';
-
-// ─── Static data ──────────────────────────────────────────────────────────────
-
-const PROTOCOLS: DeFiProtocol[] = [
+const PROTOCOLS: Protocol[] = [
     {
-        id: 'apriori',
-        name: 'Apriori',
-        icon: '🔷',
-        description: 'Liquid MON staking. Earn native staking rewards while keeping liquidity via aprMON tokens.',
-        apy: '8.2%',
-        apyNum: 8.2,
-        risk: 'low',
-        tvl: '$4.2M',
-        strategy: 'MON → aprMON → staking yield',
-        color: 'var(--info)',
+        id: 'kuru',
+        name: 'Kuru Exchange',
+        icon: '⚡',
+        apy: 22.5,
+        risk: 'high',
+        assets: ['XAUt0', 'WBTC'],
+        desc: 'Monad-native order-book DEX. Market-make on gold & BTC pairs.',
+        tvl: '$12.1M',
+        toToken: MONAD_TOKENS.XAUt0.address,
+        toSymbol: 'XAUt0',
+        toDecimals: 6,
+    },
+    {
+        id: 'neverland',
+        name: 'Neverland Finance',
+        icon: '🌿',
+        apy: 18.5,
+        risk: 'medium',
+        assets: ['XAUt0'],
+        desc: 'Gold-backed yield farming native to Monad. Earn yield on tokenised gold.',
+        tvl: '$3.2M',
+        toToken: MONAD_TOKENS.XAUt0.address,
+        toSymbol: 'XAUt0',
+        toDecimals: 6,
     },
     {
         id: 'ambient',
         name: 'Ambient Finance',
         icon: '💧',
-        description: 'Concentrated liquidity AMM. Provide USDC-MON liquidity in targeted price ranges for enhanced yield.',
-        apy: '14.7%',
-        apyNum: 14.7,
+        apy: 14.7,
         risk: 'medium',
+        assets: ['WBTC', 'XAUt0'],
+        desc: 'Concentrated liquidity AMM on Monad. Provide BTC/gold liquidity.',
         tvl: '$8.6M',
-        strategy: 'USDC + MON → LP → trading fees + incentives',
-        color: 'var(--warning)',
+        toToken: MONAD_TOKENS.WBTC.address,
+        toSymbol: 'WBTC',
+        toDecimals: 8,
     },
     {
-        id: 'kuru',
-        name: 'Kuru Exchange',
-        icon: '⚡',
-        description: 'High-performance order-book DEX native to Monad. Automated market-making on gold and BTC pairs.',
-        apy: '22.5%',
-        apyNum: 22.5,
-        risk: 'high',
-        tvl: '$12.1M',
-        strategy: 'XAUt0/USDC & WBTC/USDC market-making',
-        color: 'var(--success)',
+        id: 'morpho',
+        name: 'Morpho Blue',
+        icon: '🦋',
+        apy: 12.3,
+        risk: 'low',
+        assets: ['WBTC'],
+        desc: 'Peer-to-peer lending protocol. Supply WBTC, earn optimised lending yield.',
+        tvl: '$8.9M',
+        toToken: MONAD_TOKENS.WBTC.address,
+        toSymbol: 'WBTC',
+        toDecimals: 8,
     },
 ];
 
-const RISK_LABEL: Record<string, { label: string; cls: string }> = {
-    low:    { label: 'Low Risk',    cls: 'bg-info-soft text-[var(--info)]' },
-    medium: { label: 'Medium Risk', cls: 'bg-warning-soft text-[var(--warning)]' },
-    high:   { label: 'High Risk',   cls: 'bg-success-soft text-[var(--success)]' },
+const RISK_STYLE = {
+    low:    { cls: 'bg-info-soft text-[var(--info)]',       label: 'Low Risk' },
+    medium: { cls: 'bg-warning-soft text-[var(--warning)]', label: 'Med Risk' },
+    high:   { cls: 'bg-success-soft text-[var(--success)]', label: 'High Risk' },
 };
 
-const REBALANCE_OPTIONS: { id: RebalanceFreq; label: string }[] = [
-    { id: 'daily',   label: 'Daily' },
-    { id: 'weekly',  label: 'Weekly' },
-    { id: 'monthly', label: 'Monthly' },
-];
+// ─── AI analysis ─────────────────────────────────────────────────────────────
 
-// ─── Component ────────────────────────────────────────────────────────────────
+interface DeFiRecommendation {
+    protocolId: string;
+    reason: string;
+    confidence: number;
+    action: 'ENTER' | 'WAIT';
+}
 
-export default function DeFiAgentPage() {
+async function analyzeDeFi(usdcBalance: number): Promise<DeFiRecommendation> {
+    const genAI = new GoogleGenerativeAI(
+        process.env.NEXT_PUBLIC_GEMINI_API_KEY || ''
+    );
+    const model = genAI.getGenerativeModel({
+        model: 'gemini-2.5-flash',
+        generationConfig: { temperature: 0.7, maxOutputTokens: 512 },
+    });
+
+    const prompt = `You are a DeFi yield advisor. The user has $${usdcBalance.toFixed(2)} USDC on Monad mainnet and wants to maximise yield while keeping exposure to BTC or tokenised gold (XAUt0).
+
+Available protocols:
+${PROTOCOLS.map(p => `- ${p.name} (id: ${p.id}): APY ${p.apy}%, risk: ${p.risk}, assets: ${p.assets.join('/')}, TVL: ${p.tvl}`).join('\n')}
+
+Analyse risk-adjusted yield and recommend ONE protocol. Respond ONLY in valid JSON (no markdown):
+{
+  "protocolId": "<one of: kuru|neverland|ambient|morpho>",
+  "reason": "<1-2 sentence explanation>",
+  "confidence": <50-95>,
+  "action": "ENTER" or "WAIT"
+}`;
+
+    const result = await model.generateContent(prompt);
+    const text = result.response.text();
+    const match = text.match(/\{[\s\S]*\}/);
+    if (!match) throw new Error('No JSON in AI response');
+    const rec = JSON.parse(match[0]) as DeFiRecommendation;
+    return {
+        protocolId: PROTOCOLS.find(p => p.id === rec.protocolId) ? rec.protocolId : PROTOCOLS[0].id,
+        reason: rec.reason ?? '',
+        confidence: Math.min(95, Math.max(50, rec.confidence ?? 70)),
+        action: rec.action === 'WAIT' ? 'WAIT' : 'ENTER',
+    };
+}
+
+// ─── Page ────────────────────────────────────────────────────────────────────
+
+export default function DeFiPage() {
     const router = useRouter();
-    const { ready, authenticated } = usePrivy();
+    const { ready, authenticated, user } = usePrivy();
+    const { wallets } = useWallets();
 
+    const [usdcBalance, setUsdcBalance] = useState(0);
+    const [selectedId, setSelectedId] = useState<string | null>(null);
+    const [amount, setAmount] = useState('');
+    const [quote, setQuote] = useState<Awaited<ReturnType<typeof getMonadSwapQuote>>>(null);
+    const [quoteLoading, setQuoteLoading] = useState(false);
+    const [executing, setExecuting] = useState(false);
+    const [txHash, setTxHash] = useState<string | null>(null);
+    const [txError, setTxError] = useState<string | null>(null);
+
+    const [analyzing, setAnalyzing] = useState(false);
+    const [recommendation, setRecommendation] = useState<DeFiRecommendation | null>(null);
+    const [autoRunning, setAutoRunning] = useState(false);
+
+    const walletAddress = user?.wallet?.address;
+    const activeWallet = wallets.find(w => w.walletClientType === 'privy') || wallets[0];
+
+    const selected = PROTOCOLS.find(p => p.id === selectedId) ?? null;
+    const parsedAmount = parseFloat(amount) || 0;
+
+    // Redirect if not authed
     useEffect(() => {
         if (ready && !authenticated) router.push('/');
     }, [ready, authenticated, router]);
 
-    const [allocations, setAllocations] = useState<Record<string, number>>({
-        apriori: 40,
-        ambient: 35,
-        kuru:    25,
-    });
-    const [settingsOpen, setSettingsOpen] = useState(false);
-    const [agentEnabled, setAgentEnabled] = useState(false);
-    const [autoCompound, setAutoCompound] = useState(true);
-    const [rebalanceFreq, setRebalanceFreq] = useState<RebalanceFreq>('weekly');
-    const [minRebalance, setMinRebalance] = useState(5);
-    const [isSaving, setIsSaving] = useState(false);
-    const [saveStatus, setSaveStatus] = useState<'idle' | 'saved' | 'error'>('idle');
+    // Load USDC balance
+    useEffect(() => {
+        if (!walletAddress) return;
+        getUserBalances(walletAddress).then(b => setUsdcBalance(b.usdc)).catch(() => {});
+    }, [walletAddress]);
 
-    const totalAlloc = Object.values(allocations).reduce((s, v) => s + v, 0);
-    const allocValid = totalAlloc === 100;
+    // Get LiFi quote when amount + protocol change
+    useEffect(() => {
+        if (!selected || parsedAmount <= 0 || !walletAddress) {
+            setQuote(null);
+            return;
+        }
+        let cancelled = false;
+        setQuoteLoading(true);
 
-    // Keep allocations summing to 100 by scaling the other two when one slider moves
-    function handleSlider(id: string, value: number) {
-        setAllocations(prev => {
-            const others = Object.entries(prev).filter(([k]) => k !== id);
-            const othersTarget = 100 - value;
-            const othersTotal = others.reduce((s, [, v]) => s + v, 0);
-
-            const updated: Record<string, number> = { [id]: value };
-            if (othersTotal === 0) {
-                const even = Math.floor(othersTarget / others.length);
-                others.forEach(([k], i) => {
-                    updated[k] = i === others.length - 1 ? othersTarget - even * (others.length - 1) : even;
+        const handle = setTimeout(async () => {
+            try {
+                const fromAmount = ethers.parseUnits(parsedAmount.toFixed(6), 6).toString();
+                const q = await getMonadSwapQuote({
+                    fromToken: MONAD_TOKENS.USDC.address,
+                    toToken: selected.toToken,
+                    fromAmount,
+                    fromAddress: walletAddress,
                 });
-            } else {
-                const scale = othersTarget / othersTotal;
-                let remaining = othersTarget;
-                others.forEach(([k, v], i) => {
-                    const newVal = i === others.length - 1 ? remaining : Math.round(v * scale);
-                    updated[k] = Math.max(0, newVal);
-                    remaining -= updated[k];
+                if (!cancelled) { setQuote(q); setQuoteLoading(false); }
+            } catch {
+                if (!cancelled) { setQuote(null); setQuoteLoading(false); }
+            }
+        }, 600);
+
+        return () => { cancelled = true; clearTimeout(handle); setQuoteLoading(false); };
+    }, [selected, parsedAmount, walletAddress]);
+
+    // Get signer with chain switch
+    const getSigner = useCallback(async (): Promise<ethers.Signer> => {
+        if (!activeWallet) throw new Error('No wallet connected');
+        const provider = await activeWallet.getEthereumProvider();
+        const chainIdHex = `0x${CHAIN_ID.toString(16)}`;
+        try {
+            const cur = await provider.request({ method: 'eth_chainId' });
+            if (cur !== chainIdHex) {
+                await provider.request({
+                    method: 'wallet_switchEthereumChain',
+                    params: [{ chainId: chainIdHex }],
+                }).catch(async (e: { code?: number }) => {
+                    if (e?.code === 4902) {
+                        await provider.request({
+                            method: 'wallet_addEthereumChain',
+                            params: [{
+                                chainId: chainIdHex,
+                                chainName: MONAD_MAINNET.name,
+                                nativeCurrency: MONAD_MAINNET.nativeCurrency,
+                                rpcUrls: [RPC_URL],
+                                blockExplorerUrls: [EXPLORER_URL],
+                            }],
+                        });
+                    }
                 });
             }
-            return updated;
-        });
-    }
-
-    async function handleSave() {
-        if (!allocValid) return;
-        setIsSaving(true);
-        setSaveStatus('idle');
-        try {
-            const config = { allocations, autoCompound, rebalanceFreq, minRebalance, enabled: agentEnabled };
-            localStorage.setItem('defi_agent_config', JSON.stringify(config));
-            await new Promise(r => setTimeout(r, 700));
-            setSaveStatus('saved');
-            setTimeout(() => setSaveStatus('idle'), 3000);
-        } catch {
-            setSaveStatus('error');
-        } finally {
-            setIsSaving(false);
-        }
-    }
-
-    useEffect(() => {
-        try {
-            const raw = localStorage.getItem('defi_agent_config');
-            if (!raw) return;
-            const cfg = JSON.parse(raw);
-            if (cfg.allocations) setAllocations(cfg.allocations);
-            if (typeof cfg.autoCompound === 'boolean') setAutoCompound(cfg.autoCompound);
-            if (cfg.rebalanceFreq) setRebalanceFreq(cfg.rebalanceFreq);
-            if (typeof cfg.minRebalance === 'number') setMinRebalance(cfg.minRebalance);
-            if (typeof cfg.enabled === 'boolean') setAgentEnabled(cfg.enabled);
         } catch { /* ignore */ }
-    }, []);
+        return new ethers.BrowserProvider(provider).getSigner();
+    }, [activeWallet]);
 
-    const blendedApy = PROTOCOLS.reduce((sum, p) => sum + p.apyNum * (allocations[p.id] / 100), 0);
+    // Execute stake (swap USDC → protocol asset via LiFi)
+    const handleStake = useCallback(async (proto: Protocol, q: typeof quote) => {
+        if (!q || parsedAmount <= 0) return;
+        setExecuting(true);
+        setTxError(null);
+        setTxHash(null);
+        try {
+            const signer = await getSigner();
+            const result = await executeMonadSwap(signer, q);
+            setTxHash(result.txHash);
+
+            addSwapRecord({
+                id: `defi-${Date.now()}`,
+                fromToken: MONAD_TOKENS.USDC.address,
+                fromTokenSymbol: 'USDC',
+                toToken: proto.toToken,
+                toTokenSymbol: proto.toSymbol,
+                fromAmount: ethers.parseUnits(parsedAmount.toFixed(6), 6).toString(),
+                fromAmountHuman: parsedAmount,
+                toAmount: q.toAmount,
+                toAmountHuman: Number(ethers.formatUnits(q.toAmount, proto.toDecimals)),
+                txHash: result.txHash,
+                toolUsed: `${proto.name} via LiFi`,
+                timestamp: Date.now(),
+                status: 'completed',
+            });
+
+            // Refresh balance
+            if (walletAddress) getUserBalances(walletAddress).then(b => setUsdcBalance(b.usdc)).catch(() => {});
+        } catch (err) {
+            setTxError(err instanceof Error ? err.message : 'Transaction failed');
+        } finally {
+            setExecuting(false);
+        }
+    }, [getSigner, parsedAmount, walletAddress]);
+
+    // AI analysis
+    const handleAnalyze = async () => {
+        setAnalyzing(true);
+        setRecommendation(null);
+        try {
+            const rec = await analyzeDeFi(usdcBalance);
+            setRecommendation(rec);
+            // Auto-select recommended protocol
+            if (rec.action === 'ENTER') setSelectedId(rec.protocolId);
+        } catch {
+            setRecommendation({
+                protocolId: 'kuru',
+                reason: 'AI unavailable. Showing highest APY option.',
+                confidence: 60,
+                action: 'ENTER',
+            });
+            setSelectedId('kuru');
+        } finally {
+            setAnalyzing(false);
+        }
+    };
+
+    // Auto execute — pick recommended (or highest APY) with 10% of balance
+    const handleAuto = async () => {
+        if (!walletAddress || usdcBalance <= 0) return;
+        setAutoRunning(true);
+        setTxError(null);
+
+        try {
+            // Pick protocol
+            const proto = recommendation?.action === 'ENTER'
+                ? (PROTOCOLS.find(p => p.id === recommendation.protocolId) ?? PROTOCOLS[0])
+                : PROTOCOLS[0];
+
+            const autoAmount = Math.max(1, Math.floor(usdcBalance * 0.1 * 100) / 100);
+            const fromAmount = ethers.parseUnits(autoAmount.toFixed(6), 6).toString();
+
+            const q = await getMonadSwapQuote({
+                fromToken: MONAD_TOKENS.USDC.address,
+                toToken: proto.toToken,
+                fromAmount,
+                fromAddress: walletAddress,
+            });
+
+            if (!q) throw new Error('Could not get quote');
+
+            setSelectedId(proto.id);
+            setAmount(autoAmount.toString());
+            setQuote(q);
+
+            await handleStake(proto, q);
+        } catch (err) {
+            setTxError(err instanceof Error ? err.message : 'Auto failed');
+        } finally {
+            setAutoRunning(false);
+        }
+    };
 
     if (!ready || !authenticated) {
         return (
@@ -185,270 +350,191 @@ export default function DeFiAgentPage() {
     return (
         <MobileLayout activeTab="pay">
             {/* Header */}
-            <div className="bg-background sticky top-0 z-40 px-4 pt-12 pb-4 border-b border-border">
-                <div className="flex items-center gap-3">
-                    <button
-                        onClick={() => router.push('/dashboard')}
-                        className="p-2 rounded-full bg-muted hover:bg-secondary transition-colors"
-                    >
+            <div className="bg-background sticky top-0 z-40 px-4 pt-12 pb-3 border-b border-border">
+                <div className="flex items-center gap-3 mb-3">
+                    <button onClick={() => router.push('/dashboard')} className="p-2 rounded-full bg-muted hover:bg-secondary transition-colors">
                         <ArrowLeft className="w-5 h-5" />
                     </button>
                     <div className="flex-1">
-                        <h1 className="text-xl font-semibold flex items-center gap-2">
-                            <Layers className="w-5 h-5 text-primary" />
-                            DeFi Agent
-                        </h1>
-                        <p className="text-xs text-muted-foreground">Multi-protocol yield automation on Monad</p>
+                        <h1 className="text-xl font-semibold">DeFi Yield</h1>
+                        <p className="text-xs text-muted-foreground">
+                            Balance: <span className="font-medium text-foreground">${usdcBalance.toFixed(2)} USDC</span>
+                        </p>
                     </div>
-                    <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium ${
-                        agentEnabled ? 'bg-success-soft text-[var(--success)]' : 'bg-muted text-muted-foreground'
-                    }`}>
-                        <span className={`w-2 h-2 rounded-full ${agentEnabled ? 'bg-[var(--success)] animate-pulse' : 'bg-muted-foreground'}`} />
-                        {agentEnabled ? 'Active' : 'Inactive'}
-                    </div>
+                </div>
+
+                {/* Action bar */}
+                <div className="flex gap-2">
+                    <button
+                        onClick={handleAnalyze}
+                        disabled={analyzing || autoRunning}
+                        className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-muted hover:bg-secondary text-sm font-medium transition-colors disabled:opacity-50"
+                    >
+                        {analyzing
+                            ? <><Loader2 className="w-4 h-4 animate-spin" /> Analyzing…</>
+                            : <><Brain className="w-4 h-4" /> Analyze</>}
+                    </button>
+                    <button
+                        onClick={handleAuto}
+                        disabled={autoRunning || analyzing || usdcBalance <= 0}
+                        className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-primary text-white text-sm font-semibold transition-colors disabled:opacity-50 active:scale-[0.98]"
+                    >
+                        {autoRunning
+                            ? <><Loader2 className="w-4 h-4 animate-spin" /> Running…</>
+                            : <><Zap className="w-4 h-4" /> Auto</>}
+                    </button>
                 </div>
             </div>
 
             <div className="px-4 py-4 space-y-4 pb-28">
 
-                {/* Blended yield banner */}
-                <div className="ios-card p-4 bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20">
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <p className="text-xs text-muted-foreground mb-1">Blended Est. APY</p>
-                            <p className="text-3xl font-bold text-primary">{blendedApy.toFixed(1)}%</p>
-                            <p className="text-xs text-muted-foreground mt-1">Weighted by your allocation</p>
-                        </div>
-                        <div className="text-right">
-                            <BarChart3 className="w-10 h-10 text-primary/40 ml-auto mb-1" />
-                            <p className="text-xs text-muted-foreground">3 protocols</p>
-                            <p className="text-xs text-muted-foreground">Monad Mainnet</p>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Protocol allocation cards */}
-                <div>
-                    <div className="flex items-center justify-between mb-3">
-                        <h2 className="text-base font-semibold">Protocol Allocation</h2>
-                        <span className={`text-sm font-medium ${allocValid ? 'text-[var(--success)]' : 'text-[var(--destructive)]'}`}>
-                            {totalAlloc}% / 100%
-                        </span>
-                    </div>
-
-                    <div className="space-y-3">
-                        {PROTOCOLS.map((protocol) => {
-                            const risk = RISK_LABEL[protocol.risk];
-                            const alloc = allocations[protocol.id] ?? 0;
-
-                            return (
-                                <div key={protocol.id} className="ios-card p-4 space-y-3">
-                                    <div className="flex items-start gap-3">
-                                        <span className="text-2xl">{protocol.icon}</span>
-                                        <div className="flex-1 min-w-0">
-                                            <div className="flex items-center gap-2 flex-wrap">
-                                                <h3 className="font-semibold">{protocol.name}</h3>
-                                                <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${risk.cls}`}>
-                                                    {risk.label}
-                                                </span>
-                                            </div>
-                                            <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
-                                                {protocol.description}
-                                            </p>
-                                        </div>
-                                    </div>
-
-                                    <div className="flex gap-3 text-center">
-                                        <div className="flex-1 bg-muted rounded-lg p-2">
-                                            <p className="text-xs text-muted-foreground">Est. APY</p>
-                                            <p className="font-bold" style={{ color: protocol.color }}>{protocol.apy}</p>
-                                        </div>
-                                        <div className="flex-1 bg-muted rounded-lg p-2">
-                                            <p className="text-xs text-muted-foreground">TVL</p>
-                                            <p className="font-bold text-foreground">{protocol.tvl}</p>
-                                        </div>
-                                        <div className="flex-1 bg-muted rounded-lg p-2">
-                                            <p className="text-xs text-muted-foreground">Target</p>
-                                            <p className="font-bold text-primary">{alloc}%</p>
-                                        </div>
-                                    </div>
-
-                                    <div className="flex items-start gap-1.5 text-xs text-muted-foreground">
-                                        <Info className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-                                        <span>{protocol.strategy}</span>
-                                    </div>
-
-                                    {/* Allocation slider */}
-                                    <div className="space-y-1">
-                                        <div className="flex justify-between text-xs text-muted-foreground">
-                                            <span>Drag to adjust</span>
-                                            <span className="font-medium text-foreground">{alloc}%</span>
-                                        </div>
-                                        <input
-                                            type="range"
-                                            min={0}
-                                            max={100}
-                                            value={alloc}
-                                            onChange={e => handleSlider(protocol.id, Number(e.target.value))}
-                                            className="w-full accent-primary h-2 rounded-full cursor-pointer"
-                                        />
-                                    </div>
-
-                                    <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                                        <div
-                                            className="h-full rounded-full transition-all duration-200"
-                                            style={{ width: `${alloc}%`, backgroundColor: protocol.color }}
-                                        />
-                                    </div>
-                                </div>
-                            );
-                        })}
-                    </div>
-
-                    {!allocValid && (
-                        <div className="mt-2 flex items-center gap-2 text-xs text-[var(--destructive)]">
-                            <AlertCircle className="w-4 h-4 shrink-0" />
-                            Allocations must total exactly 100%
-                        </div>
-                    )}
-                </div>
-
-                {/* Agent toggle */}
-                <div className="ios-card p-4">
-                    <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
-                                agentEnabled ? 'bg-success-soft' : 'bg-muted'
-                            }`}>
-                                <Power className={`w-5 h-5 ${agentEnabled ? 'text-[var(--success)]' : 'text-muted-foreground'}`} />
+                {/* AI Recommendation banner */}
+                {recommendation && (
+                    <div className={`ios-card p-4 flex gap-3 border ${
+                        recommendation.action === 'ENTER'
+                            ? 'border-primary/30 bg-primary/5'
+                            : 'border-warning/30 bg-warning-soft'
+                    }`}>
+                        <Sparkles className={`w-5 h-5 mt-0.5 shrink-0 ${recommendation.action === 'ENTER' ? 'text-primary' : 'text-[var(--warning)]'}`} />
+                        <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                                <span className={`text-sm font-semibold ${recommendation.action === 'ENTER' ? 'text-primary' : 'text-[var(--warning)]'}`}>
+                                    {recommendation.action === 'ENTER'
+                                        ? `AI: Enter ${PROTOCOLS.find(p => p.id === recommendation.protocolId)?.name}`
+                                        : 'AI: Wait for better opportunity'}
+                                </span>
+                                <span className="text-xs text-muted-foreground">{recommendation.confidence}% confident</span>
                             </div>
-                            <div>
-                                <p className="font-semibold">DeFi Agent</p>
-                                <p className="text-xs text-muted-foreground">
-                                    {agentEnabled ? 'Autonomously managing positions' : 'Enable automated rebalancing'}
-                                </p>
-                            </div>
+                            <p className="text-xs text-muted-foreground leading-relaxed">{recommendation.reason}</p>
                         </div>
-                        <button
-                            onClick={() => setAgentEnabled(v => !v)}
-                            className={`relative w-12 h-6 rounded-full transition-colors ${
-                                agentEnabled ? 'bg-[var(--success)]' : 'bg-muted-foreground/30'
-                            }`}
-                            aria-label="Toggle DeFi agent"
-                        >
-                            <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${
-                                agentEnabled ? 'translate-x-6' : ''
-                            }`} />
-                        </button>
                     </div>
-                </div>
+                )}
 
-                {/* Advanced settings */}
-                <div className="ios-card overflow-hidden">
-                    <button
-                        onClick={() => setSettingsOpen(v => !v)}
-                        className="w-full flex items-center justify-between p-4 hover:bg-muted/50 transition-colors"
-                    >
-                        <div className="flex items-center gap-2">
-                            <Shield className="w-4 h-4 text-muted-foreground" />
-                            <span className="font-medium">Agent Settings</span>
-                        </div>
-                        {settingsOpen
-                            ? <ChevronUp className="w-4 h-4 text-muted-foreground" />
-                            : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
-                    </button>
+                {/* Protocol list */}
+                <div className="space-y-2">
+                    {PROTOCOLS.map(proto => {
+                        const risk = RISK_STYLE[proto.risk];
+                        const isSelected = selectedId === proto.id;
+                        const isRecommended = recommendation?.protocolId === proto.id && recommendation.action === 'ENTER';
 
-                    {settingsOpen && (
-                        <div className="px-4 pb-4 space-y-5 border-t border-border pt-4">
-                            {/* Auto-compound */}
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <p className="text-sm font-medium">Auto-compound Rewards</p>
-                                    <p className="text-xs text-muted-foreground">Reinvest yield automatically</p>
-                                </div>
+                        return (
+                            <div key={proto.id} className={`ios-card overflow-hidden transition-all ${isSelected ? 'ring-2 ring-primary/40' : ''}`}>
+                                {/* Protocol row */}
                                 <button
-                                    onClick={() => setAutoCompound(v => !v)}
-                                    className={`relative w-10 h-5 rounded-full transition-colors ${
-                                        autoCompound ? 'bg-primary' : 'bg-muted-foreground/30'
-                                    }`}
+                                    className="w-full flex items-center gap-3 p-4 hover:bg-muted/40 transition-colors text-left"
+                                    onClick={() => setSelectedId(isSelected ? null : proto.id)}
                                 >
-                                    <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${
-                                        autoCompound ? 'translate-x-5' : ''
-                                    }`} />
+                                    <span className="text-2xl">{proto.icon}</span>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                            <span className="font-semibold">{proto.name}</span>
+                                            {isRecommended && (
+                                                <span className="text-xs px-1.5 py-0.5 rounded-full bg-primary text-white font-medium">AI Pick</span>
+                                            )}
+                                            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${risk.cls}`}>{risk.label}</span>
+                                        </div>
+                                        <div className="flex items-center gap-3 mt-0.5">
+                                            <span className="text-sm text-muted-foreground">{proto.assets.join(' · ')}</span>
+                                            <span className="text-xs text-muted-foreground">TVL {proto.tvl}</span>
+                                        </div>
+                                    </div>
+                                    <div className="text-right shrink-0">
+                                        <p className="text-lg font-bold text-[var(--success)]">{proto.apy}%</p>
+                                        <p className="text-xs text-muted-foreground">APY</p>
+                                    </div>
+                                    <ChevronRight className={`w-4 h-4 text-muted-foreground transition-transform ${isSelected ? 'rotate-90' : ''}`} />
                                 </button>
-                            </div>
 
-                            {/* Rebalance frequency */}
-                            <div>
-                                <p className="text-sm font-medium mb-2">Rebalance Frequency</p>
-                                <div className="grid grid-cols-3 gap-2">
-                                    {REBALANCE_OPTIONS.map(opt => (
+                                {/* Expanded stake panel */}
+                                {isSelected && (
+                                    <div className="px-4 pb-4 space-y-3 border-t border-border pt-3">
+                                        <p className="text-xs text-muted-foreground leading-relaxed">{proto.desc}</p>
+
+                                        <div className="space-y-2">
+                                            <label className="text-sm font-medium">Amount (USDC)</label>
+                                            <div className="flex gap-2">
+                                                <Input
+                                                    type="number"
+                                                    placeholder="0.00"
+                                                    value={amount}
+                                                    onChange={e => { setAmount(e.target.value); setTxHash(null); setTxError(null); }}
+                                                    className="rounded-xl py-5 text-lg font-semibold flex-1"
+                                                    disabled={executing}
+                                                />
+                                                <button
+                                                    onClick={() => setAmount((usdcBalance * 0.5).toFixed(2))}
+                                                    className="px-3 py-2 rounded-xl bg-muted text-xs font-medium hover:bg-secondary transition-colors"
+                                                >50%</button>
+                                                <button
+                                                    onClick={() => setAmount(usdcBalance.toFixed(2))}
+                                                    className="px-3 py-2 rounded-xl bg-muted text-xs font-medium hover:bg-secondary transition-colors"
+                                                >Max</button>
+                                            </div>
+                                        </div>
+
+                                        {/* Quote preview */}
+                                        {quoteLoading && (
+                                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                                <Loader2 className="w-4 h-4 animate-spin" /> Getting quote…
+                                            </div>
+                                        )}
+                                        {quote && !quoteLoading && (
+                                            <div className="bg-muted rounded-xl p-3 space-y-1 text-sm">
+                                                <div className="flex justify-between">
+                                                    <span className="text-muted-foreground">You receive</span>
+                                                    <span className="font-semibold">
+                                                        {Number(ethers.formatUnits(quote.toAmount, proto.toDecimals)).toFixed(6)} {proto.toSymbol}
+                                                    </span>
+                                                </div>
+                                                <div className="flex justify-between text-xs text-muted-foreground">
+                                                    <span>Via {quote.toolUsed}</span>
+                                                    <span>Fee ${quote.feeUSD.toFixed(4)}</span>
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* Tx result */}
+                                        {txHash && (
+                                            <div className="flex items-center gap-2 text-sm bg-success-soft text-[var(--success)] rounded-xl p-3">
+                                                <CheckCircle2 className="w-4 h-4 shrink-0" />
+                                                <div className="flex-1 min-w-0">
+                                                    <span className="font-medium">Staked successfully</span>
+                                                    <a
+                                                        href={`${EXPLORER_URL}/tx/${txHash}`}
+                                                        target="_blank" rel="noopener noreferrer"
+                                                        className="flex items-center gap-1 text-xs mt-0.5 hover:underline"
+                                                    >
+                                                        {txHash.slice(0, 10)}…{txHash.slice(-6)}
+                                                        <ExternalLink className="w-3 h-3" />
+                                                    </a>
+                                                </div>
+                                            </div>
+                                        )}
+                                        {txError && (
+                                            <div className="flex items-start gap-2 text-sm bg-destructive-soft text-[var(--destructive)] rounded-xl p-3">
+                                                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                                                <p className="flex-1 break-all">{txError}</p>
+                                            </div>
+                                        )}
+
                                         <button
-                                            key={opt.id}
-                                            onClick={() => setRebalanceFreq(opt.id)}
-                                            className={`py-2 rounded-lg text-sm font-medium transition-colors ${
-                                                rebalanceFreq === opt.id
-                                                    ? 'bg-primary text-white'
-                                                    : 'bg-muted text-foreground hover:bg-secondary'
-                                            }`}
+                                            onClick={() => { if (quote) handleStake(proto, quote); }}
+                                            disabled={!quote || parsedAmount <= 0 || executing || parsedAmount > usdcBalance}
+                                            className="w-full py-3.5 rounded-2xl font-semibold text-sm flex items-center justify-center gap-2 bg-primary text-white disabled:opacity-50 transition-all active:scale-[0.98]"
                                         >
-                                            {opt.label}
+                                            {executing
+                                                ? <><Loader2 className="w-4 h-4 animate-spin" /> Staking…</>
+                                                : parsedAmount > usdcBalance
+                                                    ? 'Insufficient USDC'
+                                                    : !quote && parsedAmount > 0
+                                                        ? <><Loader2 className="w-4 h-4 animate-spin" /> Getting quote…</>
+                                                        : <><TrendingUp className="w-4 h-4" /> Stake ${parsedAmount > 0 ? parsedAmount.toFixed(2) : '0.00'} → {proto.toSymbol}</>}
                                         </button>
-                                    ))}
-                                </div>
+                                    </div>
+                                )}
                             </div>
-
-                            {/* Min drift */}
-                            <div>
-                                <div className="flex justify-between text-sm mb-2">
-                                    <span className="font-medium">Min. Drift to Rebalance</span>
-                                    <span className="text-primary font-semibold">{minRebalance}%</span>
-                                </div>
-                                <input
-                                    type="range"
-                                    min={1}
-                                    max={20}
-                                    value={minRebalance}
-                                    onChange={e => setMinRebalance(Number(e.target.value))}
-                                    className="w-full accent-primary h-2 rounded-full cursor-pointer"
-                                />
-                                <p className="text-xs text-muted-foreground mt-1">
-                                    Rebalance only when drift ≥ {minRebalance}% from target
-                                </p>
-                            </div>
-                        </div>
-                    )}
-                </div>
-
-                {/* Save button */}
-                <button
-                    onClick={handleSave}
-                    disabled={isSaving || !allocValid}
-                    className="w-full py-4 rounded-2xl font-semibold text-base flex items-center justify-center gap-2 bg-primary text-white disabled:opacity-50 transition-all active:scale-[0.98]"
-                >
-                    {isSaving ? (
-                        <><Loader2 className="w-5 h-5 animate-spin" /> Saving…</>
-                    ) : saveStatus === 'saved' ? (
-                        <><CheckCircle2 className="w-5 h-5" /> Configuration Saved</>
-                    ) : saveStatus === 'error' ? (
-                        <><AlertCircle className="w-5 h-5" /> Save Failed — Retry</>
-                    ) : (
-                        <><Save className="w-5 h-5" /> {agentEnabled ? 'Save & Activate Agent' : 'Save Configuration'}</>
-                    )}
-                </button>
-
-                {/* About section */}
-                <div className="ios-card p-4 space-y-2">
-                    <div className="flex items-center gap-2 mb-1">
-                        <TrendingUp className="w-4 h-4 text-muted-foreground" />
-                        <p className="text-sm font-semibold">How DeFi Agent Works</p>
-                    </div>
-                    <p className="text-xs text-muted-foreground leading-relaxed">
-                        The DeFi Agent monitors your target allocations and automatically rebalances your positions across Apriori, Ambient Finance, and Kuru Exchange on Monad.
-                    </p>
-                    <p className="text-xs text-muted-foreground leading-relaxed">
-                        Set your desired split, enable the agent, and it routes your USDC to maximize yield while respecting your risk profile. All transactions settle on Monad with ~1s finality.
-                    </p>
+                        );
+                    })}
                 </div>
 
             </div>

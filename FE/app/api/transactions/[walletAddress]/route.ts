@@ -10,8 +10,8 @@ import {
 // eth_getLogs to a 10-block range — completely unusable for history scanning.
 // The public RPC supports up to 100-block ranges and has no API-key rate limits.
 const LOG_RPC = process.env.MONAD_LOG_RPC_URL || 'https://rpc.monad.xyz';
-const LOG_CHUNK_SIZE = 99;   // stays within the 100-block public-RPC limit
-const BLOCK_RANGE     = 5_000; // ~83 min of Monad history (~1 s/block)
+const LOG_CHUNK_SIZE = 99;    // stays within the 100-block public-RPC limit
+const BLOCK_RANGE     = 2_000; // ~33 min of Monad history (~1 s/block)
 
 async function queryFilterChunked(
   contract: ethers.Contract,
@@ -29,7 +29,7 @@ async function queryFilterChunked(
     } catch (err) {
       console.warn(`[TxAPI] chunk ${start}-${end} failed:`, err);
     }
-    await new Promise((r) => setTimeout(r, 30));
+    await new Promise((r) => setTimeout(r, 20));
   }
 
   return allLogs;
