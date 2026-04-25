@@ -1,12 +1,6 @@
 'use client';
 
-import {
-    ArrowUpRight,
-    Plus,
-    Sparkles,
-    ArrowDownUp,
-    ArrowLeftRight,
-} from 'lucide-react';
+import { ArrowUpRight, Plus, Sparkles } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 interface QuickAction {
@@ -27,6 +21,9 @@ interface QuickActionsProps {
     onStack?: () => void;
 }
 
+// Swap & Bridge live on their own dedicated pages and inside the Swap Agent
+// flow, so the dashboard quick actions stay focused on the three vault
+// primitives: Top Up → Stack → Withdraw.
 export function QuickActions({ onDeposit, onWithdraw, onStack }: QuickActionsProps) {
     const router = useRouter();
 
@@ -48,22 +45,6 @@ export function QuickActions({ onDeposit, onWithdraw, onStack }: QuickActionsPro
             onClick: onStack || (() => router.push('/dashboard/pay')),
         },
         {
-            id: 'swap',
-            label: 'Swap',
-            icon: ArrowDownUp,
-            tone: 'text-background',
-            chip: 'bg-foreground',
-            path: '/dashboard/swap',
-        },
-        {
-            id: 'bridge',
-            label: 'Bridge',
-            icon: ArrowLeftRight,
-            tone: 'text-white',
-            chip: 'bg-[var(--purple-700)]',
-            path: '/dashboard/bridge',
-        },
-        {
             id: 'withdraw',
             label: 'Withdraw',
             icon: ArrowUpRight,
@@ -79,7 +60,7 @@ export function QuickActions({ onDeposit, onWithdraw, onStack }: QuickActionsPro
     };
 
     return (
-        <div className="grid grid-cols-5 gap-2 sm:gap-3">
+        <div className="grid grid-cols-3 gap-2 sm:gap-3">
             {actions.map((action) => {
                 const Icon = action.icon;
                 return (
@@ -88,9 +69,7 @@ export function QuickActions({ onDeposit, onWithdraw, onStack }: QuickActionsPro
                         onClick={() => handleClick(action)}
                         className="quick-action-item btn-haptic"
                     >
-                        <span
-                            className={`quick-action-icon ${action.chip}`}
-                        >
+                        <span className={`quick-action-icon ${action.chip}`}>
                             <Icon
                                 className={`w-5 h-5 ${action.tone}`}
                                 strokeWidth={2}
