@@ -1,6 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 import { Home, Clock, Brain, User, Sparkles } from 'lucide-react';
 
 type ActiveTab = 'home' | 'history' | 'pay' | 'agent' | 'profile';
@@ -86,9 +87,13 @@ export function DesktopNavigation({ activeTab }: NavProps) {
                 className="flex items-center gap-3 btn-haptic"
                 aria-label="GoldaFinance home"
             >
-                <span
-                    className="golda-mark"
-                    style={{ ['--mark-w' as string]: '52px', ['--mark-h' as string]: '32px' }}
+                <Image
+                    src="/Icon.png"
+                    alt=""
+                    width={60}
+                    height={32}
+                    priority
+                    className="h-8 w-auto select-none"
                 />
                 <span className="text-title-3">GoldaFinance</span>
             </button>

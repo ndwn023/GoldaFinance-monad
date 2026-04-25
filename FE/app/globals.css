@@ -1080,36 +1080,6 @@
   color: var(--muted-foreground);
 }
 
-/* Brand mark — two overlapping discs (purple + ink) */
-.golda-mark {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  width: var(--mark-w, 96px);
-  height: var(--mark-h, 56px);
-  pointer-events: none;
-}
-.golda-mark::before,
-.golda-mark::after {
-  content: "";
-  width: var(--mark-h, 56px);
-  height: var(--mark-h, 56px);
-  border-radius: 50%;
-  background: var(--electric-purple);
-  position: absolute;
-  top: 0;
-}
-.golda-mark::before { left: 0; }
-.golda-mark::after {
-  right: 0;
-  background: var(--foreground);
-  mix-blend-mode: multiply;
-}
-.dark .golda-mark::after {
-  background: var(--foreground);
-  mix-blend-mode: screen;
-}
-
 /* iOS input */
 .input-ios {
   width: 100%;
