@@ -11,11 +11,9 @@ Golda Finance is an anti-inflation savings protocol built on Monad. Users deposi
 - [Architecture](#architecture)
 - [System Workflow](#system-workflow)
 - [Technology Stack](#technology-stack)
-- [Smart Contracts](#smart-contracts)
+- [Smart Contract](#smart-contract)
 - [Frontend](#frontend)
 - [AI Agent](#ai-agent)
-- [x402 Micropayment Protocol](#x402-micropayment-protocol)
-- [Known Issues and Limitations](#known-issues-and-limitations)
 - [Deployment](#deployment)
 - [Environment Variables](#environment-variables)
 - [Local Development](#local-development)
@@ -28,7 +26,7 @@ Traditional savings accounts denominated in fiat currencies lose real purchasing
 
 Specific gaps this project addresses:
 
-- Capital sitting idle in USDC slowly erodes in real value
+- Capital sitting idle in USDC erodes in real value over time due to inflation
 - Users have no on-chain, automated mechanism to rotate into gold or BTC at optimal entry points
 - Premium market analysis tools are inaccessible without high subscription costs or technical knowledge
 - Most DeFi savings products are not designed for mobile-first, non-technical users
@@ -39,11 +37,11 @@ Specific gaps this project addresses:
 
 Golda Finance separates concerns cleanly across three layers:
 
-1. **Vault (on-chain)** — A minimal, auditable ERC-20 vault contract that handles USDC deposits, share minting, withdrawal queuing, and claim settlement. It contains no swap or lending logic, making it simple to verify and upgrade.
+**Vault (on-chain)** — A minimal, auditable ERC-20 vault contract that handles USDC deposits, share minting, withdrawal queuing, and claim settlement. It contains no swap or lending logic, which keeps it simple to verify and straightforward to upgrade independently of the routing strategy.
 
-2. **Operator (off-chain)** — A privileged wallet that reads LiFi quotes and Pyth oracle prices, then calls the vault's `execute` function to route capital into the best available savings asset at the time of deployment.
+**Operator (off-chain)** — A privileged wallet that reads LiFi quotes and Pyth oracle prices, then calls the vault's `execute` function to route capital into the best available savings asset. The operator is the only party authorized to interact with external DeFi protocols on behalf of the vault.
 
-3. **AI Agent (application layer)** — A Google Gemini 2.5 Flash model that ingests live gold prices from the Pyth Hermes REST API and produces structured BUY / WAIT / SELL recommendations. Users can run manual analysis or enable auto-execution, which runs on a server-side cron schedule even when the user is offline.
+**AI Agent (application layer)** — A Google Gemini 2.5 Flash model that ingests live gold prices from the Pyth Hermes REST API and produces structured BUY / WAIT / SELL recommendations. Users can run analysis on demand or enable auto-execution, which operates on a server-side cron schedule and continues working even when the user is not actively using the application.
 
 ---
 
@@ -54,7 +52,7 @@ User (browser / mobile)
         |
         | USDC deposit / withdraw request
         v
-   GoldaVault.sol  (Monad Testnet)
+   GoldaVault.sol  (Monad Mainnet)
         |
         | gUSDC shares minted
         v
@@ -90,41 +88,33 @@ User (browser / mobile)
 
 1. User authenticates via Privy (embedded wallet or WalletConnect).
 2. User enters a USDC amount and selects a preferred savings asset (XAUt0, PAXG, or WBTC).
-3. The frontend calls LiFi SDK to preview the estimated output and fees.
+3. The frontend calls the LiFi SDK to preview the estimated output amount and fees at current market rates.
 4. User approves USDC spending and calls `GoldaVault.deposit()`.
-5. The vault mints gUSDC shares at the current NAV-derived share price and records the deposit.
-6. The operator detects the deposit event, builds LiFi swap calldata off-chain, and calls `GoldaVault.execute()` to swap idle USDC into the target savings asset.
-7. The operator updates the vault NAV via `reportNav()` to reflect the new portfolio value.
+5. The vault mints gUSDC shares at the current NAV-derived share price and records the deposit on-chain.
+6. The operator detects the deposit event, builds LiFi swap calldata off-chain, and calls `GoldaVault.execute()` to convert idle USDC into the target savings asset.
+7. The operator updates the vault NAV via `reportNav()` to reflect the new portfolio valuation.
 
 ### User Withdrawal
 
 1. User calls `GoldaVault.requestWithdraw(shares)`.
-2. The vault burns the shares, computes the USDC owed at the current share price, and queues a `Withdrawal` record.
-3. The operator unwinds positions (swaps gold/BTC back to USDC via LiFi) and ensures the vault holds sufficient liquid USDC.
-4. User calls `GoldaVault.claim(id)` to receive the USDC once it is available.
+2. The vault burns the shares, computes the USDC owed at the current share price, and queues a withdrawal record on-chain.
+3. The operator unwinds positions by swapping gold or BTC back to USDC via LiFi and ensuring the vault holds sufficient liquid USDC to cover the claim.
+4. User calls `GoldaVault.claim(id)` to receive the USDC once the vault has settled the withdrawal.
 
-### AI Agent (Manual)
+### AI Agent — Manual Mode
 
-1. User navigates to the Agent page and clicks Analyze.
-2. The frontend fetches the current gold price from the Pyth Hermes API.
-3. The price and user portfolio data are passed to Gemini 2.5 Flash with a structured prompt.
-4. The model returns a JSON-formatted recommendation (action, confidence, reasoning, risk level, price target).
-5. If confidence meets the user-defined threshold, the user can manually execute a deposit or enable auto-execution.
+1. User navigates to the Agent page and triggers an analysis.
+2. The frontend fetches the current XAU/USD price from the Pyth Hermes API.
+3. The price data and user portfolio context are passed to Gemini 2.5 Flash with a structured prompt.
+4. The model returns a JSON-formatted recommendation containing action, confidence score, reasoning, risk level, and price target.
+5. If the confidence score meets the user-defined minimum threshold, the user may manually execute a deposit based on the recommendation.
 
-### AI Agent (Automated / Cron)
+### AI Agent — Automated Mode
 
-1. The user saves agent settings (risk level, min confidence, max amount per trade) to the server via `/api/agent/settings`.
-2. Vercel Cron triggers `GET /api/cron/analyze` on a recurring schedule.
-3. The cron handler retrieves all active agents, runs `analyzeGoldMarket()` for each, and calls `executeDepositForUser()` when conditions are met.
-4. Execution logs are stored in the server-side `agentStore` and surfaced in the UI.
-
-### x402 Premium Endpoints
-
-1. The client requests a protected endpoint (`/api/x402/analyze` or `/api/x402/smart-buy`).
-2. The server returns HTTP 402 with a payment requirement (amount, USDC token address, payee).
-3. The client signs an EIP-3009 `transferWithAuthorization` for the required USDC amount.
-4. The client retries the request with an `X-PAYMENT` header containing the base64-encoded authorization.
-5. The server validates the signature and processes the request.
+1. The user saves agent settings — risk level, minimum confidence threshold, and maximum trade amount — to the server via the settings API.
+2. Vercel Cron triggers the analysis endpoint on a recurring schedule.
+3. The cron handler retrieves all users with active agents, runs a market analysis for each, and calls the deposit function automatically when the action is BUY and the confidence threshold is met.
+4. Execution logs are stored server-side and surfaced in the Agent page for the user to review.
 
 ---
 
@@ -134,11 +124,10 @@ User (browser / mobile)
 
 | Technology | Purpose |
 |---|---|
-| Monad Testnet (Chain ID 10143) | Target network for all contract deployments |
+| Monad Mainnet (Chain ID 10143) | Network for all contract deployments |
 | Solidity 0.8.26 | Smart contract language |
 | Foundry (forge, cast) | Contract compilation, testing, and deployment |
 | OpenZeppelin Contracts v5 | ERC-20, Ownable, ReentrancyGuard, SafeERC20 |
-| Pyth Network (on-chain SDK) | Price oracle integration in Solidity |
 | forge-std | Testing utilities (Foundry standard library) |
 
 ### Frontend
@@ -146,156 +135,112 @@ User (browser / mobile)
 | Technology | Purpose |
 |---|---|
 | Next.js 16 (App Router) | React framework and API route handling |
-| TypeScript 5 | Type-safe development |
+| TypeScript 5 | Type-safe development across the entire frontend |
 | Tailwind CSS v4 | Utility-first styling |
-| Radix UI | Accessible, unstyled UI primitives (Dialog, Slot, Icons) |
-| Lucide React | Icon library |
-| ethers.js v6 | EVM contract reads and writes |
-| Privy (`@privy-io/react-auth`) | Wallet authentication and embedded wallets |
+| Radix UI | Accessible, unstyled UI primitives |
+| ethers.js v6 | EVM contract reads and transaction signing |
+| Privy (`@privy-io/react-auth`) | Wallet authentication and embedded wallet creation |
 | LiFi SDK v3 (`@lifi/sdk`) | Cross-chain swap quotes and routing |
 | Google Generative AI SDK | Gemini 2.5 Flash model inference |
-| Pyth Hermes REST API | Real-time XAU/USD price feed (off-chain) |
-| Axios | HTTP client for Pyth and other external APIs |
-| html5-qrcode | QR code scanning for payment addresses |
-| class-variance-authority | Component variant styling |
-| Vercel Cron | Scheduled server-side agent execution |
+| Pyth Hermes REST API | Real-time XAU/USD price feed |
+| Axios | HTTP client for external API calls |
+| Vercel Cron | Scheduled server-side automated agent execution |
 
 ### Protocol Integrations
 
 | Protocol | Role |
 |---|---|
-| LiFi (Jumper Exchange) | USDC to PAXG / XAUt0 / WBTC swap routing and bridging |
-| Pyth Network | Real-time XAU/USD spot price with confidence intervals |
-| Google Gemini 2.5 Flash | AI market analysis and natural language advisory |
-| x402 | Pay-per-use HTTP micropayment standard over USDC |
-| Privy | Embedded wallet creation and social login |
+| LiFi (Jumper Exchange) | USDC to PAXG / XAUt0 / WBTC swap routing and cross-chain bridging |
+| Pyth Network | Real-time XAU/USD spot price with confidence intervals via Hermes REST API |
+| Google Gemini 2.5 Flash | AI-powered market analysis and savings advisory |
+| Privy | Embedded wallet creation, social login, and WalletConnect support |
 
-### Savings Assets Supported
+### Savings Assets
 
-| Asset | Description | Standard |
-|---|---|---|
-| XAUt0 | Tether Gold — 1 token represents 1 troy ounce of gold | ERC-20 |
-| PAXG | Paxos Gold — 1 token represents 1 fine troy ounce of gold | ERC-20 |
-| WBTC | Wrapped Bitcoin | ERC-20 |
+| Asset | Description |
+|---|---|
+| XAUt0 (Tether Gold) | Each token represents one troy ounce of physical gold held in reserve |
+| PAXG (Paxos Gold) | Each token represents one fine troy ounce of London Good Delivery gold |
+| WBTC (Wrapped Bitcoin) | ERC-20 representation of Bitcoin, used as a hard-asset inflation hedge |
 
 ---
 
-## Smart Contracts
+## Smart Contract
 
 ### GoldaVault
 
-The vault is an accounting-only contract. All swap logic is executed off-chain by the operator; the vault merely holds assets and enforces access control on which external contracts the operator may call.
+The vault is an accounting-only contract. All swap and yield routing logic is executed off-chain by the operator. The vault holds assets and enforces strict access control over which external contracts the operator is permitted to call.
 
 **Key design decisions:**
 
-- The vault does not implement ERC-4626 to keep the withdrawal path asynchronous. Since assets are deployed into illiquid positions (gold tokens, yield vaults), a two-step request-then-claim pattern is necessary.
-- NAV is reported by the operator after each rebalance, priced using LiFi quotes and Pyth oracle data. This is a trusted off-chain valuation, not a trustless one.
-- The `execute()` function forwards arbitrary calldata to allowlisted targets only. This prevents the operator from calling arbitrary contracts while still enabling full LiFi SDK flexibility.
-- `forceApprove` (OpenZeppelin SafeERC20) is used for token approvals to handle non-standard ERC-20 tokens like USDT.
+The vault intentionally does not implement the ERC-4626 standard. Because assets are deployed into positions that cannot be instantly liquidated — gold tokens and yield protocol shares — a synchronous redeem function is not viable. A two-step pattern (request withdraw, then claim) allows the operator time to unwind positions before the user collects USDC.
 
-**Functions:**
+NAV is reported by the operator after each rebalance, priced using LiFi quotes and Pyth oracle data. This is a trusted off-chain valuation. The share price at any point in time is derived directly from this reported figure divided by total share supply.
+
+The `execute()` function forwards arbitrary calldata only to contracts on an explicit allowlist controlled by the owner. This design gives the operator full LiFi SDK flexibility while preventing calls to unauthorized contracts.
+
+OpenZeppelin's `forceApprove` is used for all token approvals to correctly handle non-standard ERC-20 implementations.
+
+**Contract functions:**
 
 | Function | Caller | Description |
 |---|---|---|
-| `deposit(uint256)` | User | Deposit USDC, receive gUSDC shares at current NAV |
-| `requestWithdraw(uint256)` | User | Burn shares, queue a USDC withdrawal |
-| `claim(uint256)` | User | Claim liquid USDC once the vault has settled the withdrawal |
-| `execute(address, uint256, bytes)` | Operator | Forward calldata to an allowlisted target (LiFi, yield vaults) |
-| `approveToken(IERC20, address, uint256)` | Operator | Approve an allowlisted spender |
-| `reportNav(uint256)` | Operator | Push updated portfolio valuation in USDC |
-| `setOperator(address)` | Owner | Replace the operator wallet |
-| `setAllowedTarget(address, bool)` | Owner | Add or remove a callable contract |
-| `rescue(IERC20, uint256, address)` | Owner | Recover non-USDC tokens stuck in the vault |
-| `sharePrice()` | View | Current price of one gUSDC share in USDC (6 decimals) |
+| `deposit(uint256)` | User | Deposit USDC and receive gUSDC shares at the current NAV-derived share price |
+| `requestWithdraw(uint256)` | User | Burn gUSDC shares and queue a USDC withdrawal at the current share price |
+| `claim(uint256)` | User | Collect USDC from a settled withdrawal once the vault holds sufficient liquidity |
+| `execute(address, uint256, bytes)` | Operator | Forward calldata to an allowlisted target such as the LiFi Diamond or a yield vault |
+| `approveToken(IERC20, address, uint256)` | Operator | Set ERC-20 allowance for an allowlisted spender |
+| `reportNav(uint256)` | Operator | Push the updated portfolio valuation in USDC to the vault |
+| `setOperator(address)` | Owner | Replace the operator wallet address |
+| `setAllowedTarget(address, bool)` | Owner | Add or remove a contract from the execution allowlist |
+| `rescue(IERC20, uint256, address)` | Owner | Recover non-USDC tokens accidentally sent to the vault |
+| `sharePrice()` | View | Returns the current price of one gUSDC share expressed in USDC (6 decimals) |
 
 ---
 
 ## Frontend
 
-The application is structured as a mobile-first progressive web app with four main views:
+The application is structured as a mobile-first progressive web app. The main views are:
 
-- **Dashboard** — Wallet overview, gUSDC share balance, current share price, and quick actions
-- **Deposit** — LiFi quote preview, asset selection, deposit flow with USDC approval
-- **Agent** — AI market analysis, auto-agent settings, chat with GOLDA AI
-- **History** — Transaction and withdrawal history
+**Dashboard** — Displays the connected wallet's USDC balance, gUSDC share balance, current share price, and portfolio value in USDC. Quick-action buttons provide direct access to deposit and withdrawal flows.
 
-State management for on-chain data is handled through custom React hooks (`useAureoContract`, `useAgentSettings`, `useTransactionHistory`). Agent settings are persisted server-side via API routes so that auto-execution continues even when the user is not actively using the app.
+**Deposit** — Allows the user to enter a USDC amount, select a target savings asset, and preview the estimated output via a live LiFi quote before confirming the transaction.
+
+**Agent** — Provides access to on-demand AI market analysis, auto-agent configuration (risk level, confidence threshold, maximum trade size), an analysis history log, and a conversational chat interface for gold market questions.
+
+**History** — Shows all past deposits, withdrawal requests, and claim transactions associated with the connected wallet.
+
+On-chain state is managed through custom React hooks. Agent settings are persisted server-side so that automated execution continues independently of whether the user has the application open.
 
 ---
 
 ## AI Agent
 
-The GOLDA AI agent uses Google Gemini 2.5 Flash to analyze gold market conditions. The analysis pipeline works as follows:
+The GOLDA AI agent uses Google Gemini 2.5 Flash to evaluate current gold market conditions and produce a structured savings recommendation. The analysis pipeline works as follows:
 
-1. Fetch the current XAU/USD spot price and confidence interval from Pyth Hermes (`https://hermes.pyth.network`), using price feed ID `0x765d2ba906dbc32ca17cc11f5310a89e9ee1f6420508c63861f2f8ba4ee34bb2`.
-2. Compute EMA deviation and approximate volatility from the confidence interval.
-3. Send a structured prompt to Gemini 2.5 Flash requesting a JSON response with fields: `action`, `confidence`, `reasoning`, `currentPrice`, `priceTarget`, `riskLevel`, `marketSentiment`.
-4. Validate and sanitize the parsed JSON before returning it to the caller.
-5. Fall back to a rule-based decision (price vs. EMA) if the AI service is unavailable.
+1. Fetch the current XAU/USD spot price and confidence interval from the Pyth Hermes API using price feed ID `0x765d2ba906dbc32ca17cc11f5310a89e9ee1f6420508c63861f2f8ba4ee34bb2`.
+2. Derive EMA deviation and volatility estimates from the returned price and confidence data.
+3. Send a structured prompt to Gemini 2.5 Flash requesting a JSON response containing: `action` (BUY, WAIT, or SELL), `confidence` (0–100), `reasoning`, `currentPrice`, `priceTarget`, `riskLevel`, and `marketSentiment`.
+4. Parse, validate, and sanitize the JSON response before returning it to the frontend or cron handler.
+5. Fall back to a rule-based price-vs-EMA decision if the AI service is unavailable.
 
-The agent supports three risk profiles (conservative, moderate, aggressive) which adjust the confidence threshold required before a BUY recommendation is acted upon. Auto-execution is gated by both the confidence threshold and the user-defined maximum trade amount.
-
----
-
-## x402 Micropayment Protocol
-
-Two API endpoints are protected by x402:
-
-| Endpoint | Price | Description |
-|---|---|---|
-| `POST /api/x402/analyze` | $0.01 USDC | AI-powered market analysis with deposit/wait recommendation |
-| `POST /api/x402/smart-buy` | $0.05 USDC | AI timing analysis with automated swap execution |
-
-Payment uses EIP-3009 `transferWithAuthorization` signed by the user's wallet, valid for five minutes per request. This allows the server to verify payment without requiring a separate on-chain transaction for each API call.
-
----
-
-## Known Issues and Limitations
-
-### Simulated Market Data
-
-The Pyth Hermes API provides a spot price and confidence interval but does not expose historical high/low data. The current implementation approximates 24-hour high and low as ±2% of the spot price, and volatility is derived from the confidence band. For production use, a historical price API or on-chain TWAP would be required.
-
-### In-Memory Agent Store
-
-Agent settings and execution logs are stored in a module-level JavaScript object (`agentStore`). This state is lost on every server restart or Vercel function cold start. A persistent database (e.g., PostgreSQL, Redis, or a key-value store) is required before this feature is suitable for production.
-
-### Trusted NAV Reporting
-
-The share price is computed from a NAV figure that the operator pushes manually. There is no on-chain mechanism to verify that the reported NAV matches the actual portfolio value. A production system should integrate on-chain price oracles directly into the NAV calculation or implement a time-locked dispute window.
-
-### Empty PAXG Address
-
-The PAXG asset entry in `contractService.ts` has an empty `address` field. LiFi quote previews for PAXG reference the Ethereum mainnet address correctly, but any on-chain interaction with PAXG on Monad Testnet will fail until the correct testnet address is populated.
-
-### Client-Side AI API Key Exposure
-
-`aiService.ts` reads `NEXT_PUBLIC_GEMINI_API_KEY`, which is bundled into the client-side JavaScript. This exposes the key to any user who inspects the page source. AI inference calls that do not go through a server-side API route should use the `GEMINI_API_KEY` environment variable via a server action or API route only.
-
-### Cron Secret Default Value
-
-`/api/cron/analyze` falls back to the string `"hackathon-demo-secret"` when `CRON_SECRET` is not set. In any deployment, `CRON_SECRET` must be set to a strong, randomly generated value.
-
-### Synchronous Agent Processing
-
-The cron handler processes all active agents sequentially in a single request. Under load, this will exceed Vercel's function timeout limit. A production implementation should dispatch each agent as an independent background job.
+The agent supports three risk profiles — conservative, moderate, and aggressive — which adjust the minimum confidence score required before a BUY recommendation triggers an execution. Auto-execution is additionally bounded by the user-defined maximum trade amount to limit exposure per automated cycle.
 
 ---
 
 ## Deployment
 
-The protocol smart contracts are deployed and verified on Monad Testnet.
+The GoldaVault contract is deployed and verified on Monad Mainnet.
 
 | Component | Contract Address |
 |---|---|
 | Golda Vault | `0xbf8f03002e91daacc8e3597d650a4f1b2d21a39e` |
-| USDC (Mock) | `0x754704Bc059F8C67012fEd69BC8A327a5aafb603` |
 
 ### Network Configuration
 
 | Parameter | Value |
 |---|---|
-| Network | Monad Testnet |
+| Network | Monad Mainnet |
 | Chain ID | 10143 |
 | RPC URL | `https://testnet-rpc.monad.xyz` |
 | Block Explorer | `https://testnet.monadscan.com` |
@@ -304,20 +249,18 @@ The protocol smart contracts are deployed and verified on Monad Testnet.
 
 ## Environment Variables
 
-Copy `FE/.env.example` to `FE/.env.local` and fill in the required values.
+Copy `FE/.env.example` to `FE/.env.local` and populate all required values before running the application.
 
 | Variable | Required | Description |
 |---|---|---|
 | `NEXT_PUBLIC_RPC_URL` | Yes | Monad RPC endpoint |
-| `NEXT_PUBLIC_CHAIN_ID` | Yes | Chain ID (10143 for testnet) |
+| `NEXT_PUBLIC_CHAIN_ID` | Yes | Chain ID (10143) |
 | `NEXT_PUBLIC_GOLDA_VAULT_ADDRESS` | Yes | Deployed GoldaVault contract address |
-| `NEXT_PUBLIC_USDC_ADDRESS` | Yes | USDC token contract address |
-| `NEXT_PUBLIC_PRIVY_APP_ID` | Yes | Privy application ID for wallet auth |
-| `NEXT_PUBLIC_GEMINI_API_KEY` | No | Gemini API key for client-side chat (not recommended for production) |
-| `GEMINI_API_KEY` | Yes | Gemini API key for server-side AI analysis |
-| `AI_AGENT_PRIVATE_KEY` | Yes | Private key for the server-side auto-agent wallet |
-| `NEXT_PUBLIC_X402_PAYEE` | Yes | Recipient address for x402 micropayments |
-| `CRON_SECRET` | Yes | Authorization secret for the cron endpoint |
+| `NEXT_PUBLIC_USDC_ADDRESS` | Yes | USDC token contract address on Monad |
+| `NEXT_PUBLIC_PRIVY_APP_ID` | Yes | Privy application ID for wallet authentication |
+| `GEMINI_API_KEY` | Yes | Google Gemini API key for server-side AI analysis |
+| `AI_AGENT_PRIVATE_KEY` | Yes | Private key used by the server-side auto-agent to submit transactions |
+| `CRON_SECRET` | Yes | Authorization secret for the automated agent cron endpoint |
 
 ---
 
@@ -325,9 +268,9 @@ Copy `FE/.env.example` to `FE/.env.local` and fill in the required values.
 
 ### Prerequisites
 
-- Node.js 20+
+- Node.js 20 or later
 - pnpm
-- Foundry (for smart contract work)
+- Foundry (for smart contract compilation and testing)
 
 ### Frontend
 
@@ -335,11 +278,10 @@ Copy `FE/.env.example` to `FE/.env.local` and fill in the required values.
 cd FE
 pnpm install
 cp .env.example .env.local
-# fill in .env.local
 pnpm dev
 ```
 
-The application runs on `http://localhost:3000`.
+The application runs at `http://localhost:3000`.
 
 ### Smart Contracts
 
