@@ -171,7 +171,7 @@ export default function BridgePage() {
   if (!ready || !authenticated) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
-        <Loader2 className="w-10 h-10 animate-spin text-primary" />
+        <Loader2 className="w-10 h-10 animate-spin text-foreground" />
       </div>
     );
   }
@@ -194,7 +194,7 @@ export default function BridgePage() {
         </div>
 
         {/* Source chain selector */}
-        <div className="bg-card rounded-2xl p-4 border border-border shadow-sm space-y-3">
+        <div className="ios-card p-4 shadow-sm space-y-3">
           <div className="flex items-center justify-between">
             <span className="text-sm text-muted-foreground">From</span>
             <button
@@ -249,13 +249,13 @@ export default function BridgePage() {
 
         {/* Bridge arrow */}
         <div className="flex justify-center -my-2 relative z-10">
-          <div className="w-10 h-10 rounded-full bg-purple-500/10 border border-border flex items-center justify-center">
-            <ArrowLeftRight className="w-5 h-5 text-purple-500" />
+          <div className="w-10 h-10 rounded-full bg-surface border border-border flex items-center justify-center">
+            <ArrowLeftRight className="w-5 h-5 text-foreground" />
           </div>
         </div>
 
         {/* Destination on Monad */}
-        <div className="bg-card rounded-2xl p-4 border border-border shadow-sm space-y-3">
+        <div className="ios-card p-4 shadow-sm space-y-3">
           <div className="flex items-center justify-between">
             <span className="text-sm text-muted-foreground">To (on Monad)</span>
             <button
@@ -304,9 +304,9 @@ export default function BridgePage() {
 
         {/* Quote details */}
         {quote && (
-          <div className="mt-4 bg-gradient-to-r from-purple-50 to-indigo-50 dark:from-purple-950/30 dark:to-indigo-950/30 border border-purple-200/50 dark:border-purple-800/30 rounded-2xl p-4">
+          <div className="mt-4 bg-info-soft border border-border/50 dark:border-border/30 rounded-2xl p-4">
             <div className="flex items-start gap-3">
-              <Zap className="w-5 h-5 text-purple-500 mt-0.5 shrink-0" />
+              <Zap className="w-5 h-5 text-[var(--info)] mt-0.5 shrink-0" />
               <div className="space-y-2 text-sm w-full">
                 <p className="font-medium text-foreground">Route via {quote.toolUsed}</p>
                 <div className="space-y-1 text-muted-foreground">
@@ -344,7 +344,7 @@ export default function BridgePage() {
 
         {/* Error */}
         {error && (
-          <div className="mt-4 flex items-center gap-2 text-red-500 text-sm bg-red-50 dark:bg-red-500/10 p-4 rounded-xl">
+          <div className="mt-4 flex items-center gap-2 text-[var(--destructive)] text-sm bg-destructive-soft p-4 rounded-xl">
             <AlertCircle className="w-5 h-5 shrink-0" />
             <p>{error}</p>
           </div>
@@ -379,7 +379,7 @@ export default function BridgePage() {
             rel="noopener noreferrer"
           >
             <Button
-              className="w-full py-6 rounded-2xl bg-purple-600 hover:bg-purple-700 text-white shadow-lg shadow-purple-600/20 text-base font-semibold"
+              className="action-pill primary w-full !h-14"
               disabled={parsedAmount <= 0}
             >
               <ArrowLeftRight className="w-5 h-5 mr-2" />

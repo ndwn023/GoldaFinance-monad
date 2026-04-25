@@ -105,10 +105,10 @@ export function DepositDialog({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>{children}</DialogTrigger>
-      <DialogContent className="sm:max-w-md rounded-3xl border-border bg-card">
+      <DialogContent className="sm:max-w-md rounded-2xl border-border bg-card">
         <DialogHeader className="text-left">
-          <div className="w-14 h-14 rounded-2xl bg-green-100 dark:bg-green-500/20 flex items-center justify-center mb-4">
-            <Wallet className="w-7 h-7 text-green-500" />
+          <div className="w-14 h-14 rounded-2xl bg-success-soft flex items-center justify-center mb-4">
+            <Wallet className="w-7 h-7 text-[var(--success)]" />
           </div>
           <DialogTitle className="text-xl">Deposit to Golda Vault</DialogTitle>
           <DialogDescription className="leading-relaxed">
@@ -126,14 +126,22 @@ export function DepositDialog({
                   key={opt.id}
                   onClick={() => handlePickAsset(opt.id)}
                   disabled={isProcessing || isLoading}
-                  className={`rounded-xl border p-3 text-left transition-colors ${
+                  className={`btn-haptic rounded-xl border p-3 text-left transition-colors ${
                     asset === opt.id
-                      ? 'border-primary bg-primary/10'
-                      : 'border-border hover:bg-muted'
+                      ? 'border-foreground bg-foreground text-background'
+                      : 'border-border hover:bg-surface'
                   }`}
                 >
-                  <p className="font-semibold text-sm">{opt.label}</p>
-                  <p className="text-xs text-muted-foreground">{opt.desc}</p>
+                  <p className="text-subhead font-semibold">{opt.label}</p>
+                  <p
+                    className={`text-footnote ${
+                      asset === opt.id
+                        ? 'text-background/70'
+                        : 'text-muted-foreground'
+                    }`}
+                  >
+                    {opt.desc}
+                  </p>
                 </button>
               ))}
             </div>
@@ -185,10 +193,10 @@ export function DepositDialog({
                   size="sm"
                   onClick={() => setAmount(quick.toString())}
                   disabled={quick > usdcBalance || isProcessing || isLoading}
-                  className={`font-medium rounded-xl py-5 ${
+                  className={`btn-haptic font-medium rounded-xl py-5 ${
                     amount === quick.toString()
-                      ? 'border-primary bg-primary/10 text-primary'
-                      : 'border-border hover:bg-muted'
+                      ? 'border-foreground bg-foreground text-background hover:bg-foreground'
+                      : 'border-border hover:bg-surface'
                   } ${quick > usdcBalance ? 'opacity-50 cursor-not-allowed' : ''}`}
                 >
                   ${quick}
@@ -198,26 +206,26 @@ export function DepositDialog({
           </div>
 
           {parsedAmount > 0 && !hasEnoughBalance && (
-            <div className="flex items-center gap-2 text-red-500 text-sm bg-red-50 dark:bg-red-500/10 p-4 rounded-xl">
+            <div className="flex items-center gap-2 text-[var(--destructive)] text-sm bg-destructive-soft p-4 rounded-xl">
               <AlertCircle className="w-5 h-5 shrink-0" />
               <div>
                 <p className="font-medium">Insufficient Balance</p>
-                <p className="text-red-400">You only have ${usdcBalance.toFixed(2)} USDC.</p>
+                <p className="text-[var(--destructive)]">You only have ${usdcBalance.toFixed(2)} USDC.</p>
               </div>
             </div>
           )}
 
           {parsedAmount > 0 && !meetsMin && hasEnoughBalance && (
-            <div className="flex items-center gap-2 text-amber-600 text-sm bg-amber-50 dark:bg-amber-500/10 p-4 rounded-xl">
+            <div className="flex items-center gap-2 text-[var(--warning)] text-sm bg-warning-soft p-4 rounded-xl">
               <AlertCircle className="w-5 h-5 shrink-0" />
               <p>Minimum deposit is 1 USDC.</p>
             </div>
           )}
 
           {isValidAmount && (
-            <div className="bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-950/30 dark:to-orange-950/30 border border-amber-200/50 dark:border-amber-800/30 rounded-2xl p-4">
+            <div className="bg-warning-soft border border-border/50 dark:border-border/30 rounded-2xl p-4">
               <div className="flex items-start gap-3">
-                <Sparkles className="w-5 h-5 text-amber-500 mt-0.5 shrink-0" />
+                <Sparkles className="w-5 h-5 text-[var(--warning)] mt-0.5 shrink-0" />
                 <div className="space-y-2 text-sm w-full">
                   <p className="font-medium text-foreground">Transaction Preview</p>
                   <div className="space-y-1 text-muted-foreground">
@@ -227,7 +235,7 @@ export function DepositDialog({
                     </div>
                     <div className="flex justify-between">
                       <span>Est. gUSDC shares:</span>
-                      <span className="font-medium text-amber-600">{estimatedShares.toFixed(4)}</span>
+                      <span className="font-medium text-[var(--warning)]">{estimatedShares.toFixed(4)}</span>
                     </div>
                     <div className="flex justify-between">
                       <span>Savings asset:</span>
@@ -237,7 +245,7 @@ export function DepositDialog({
 
                   <div className="pt-2 border-t border-border/50 space-y-1">
                     <div className="flex items-center gap-1.5 text-xs">
-                      <Zap className="w-3.5 h-3.5 text-blue-500" />
+                      <Zap className="w-3.5 h-3.5 text-[var(--info)]" />
                       <span className="font-medium text-foreground">LiFi route preview</span>
                       {lifiLoading && <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />}
                     </div>
@@ -295,7 +303,7 @@ export function DepositDialog({
           <Button
             onClick={handleDeposit}
             disabled={!isValidAmount || isProcessing || isLoading}
-            className="w-full sm:w-auto bg-primary hover:bg-primary/90 text-white rounded-xl py-5"
+            className="action-pill primary w-full sm:w-auto !h-12"
           >
             {isProcessing || isLoading ? (
               <>

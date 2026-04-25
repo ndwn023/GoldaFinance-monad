@@ -62,7 +62,7 @@ export default function ProfilePage() {
     if (!ready || !authenticated) {
         return (
             <div className="min-h-screen flex items-center justify-center bg-background">
-                <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                <Loader2 className="w-8 h-8 animate-spin text-foreground" />
             </div>
         );
     }
@@ -73,52 +73,53 @@ export default function ProfilePage() {
             icon: Shield,
             label: 'Security',
             description: 'Password & 2FA',
-            color: 'text-blue-500',
-            bgColor: 'bg-blue-100 dark:bg-blue-500/20',
+            color: 'text-[var(--info)]',
+            bgColor: 'bg-info-soft',
         },
         {
             id: 'notifications',
             icon: Bell,
             label: 'Notifications',
             description: 'Push & email alerts',
-            color: 'text-amber-500',
-            bgColor: 'bg-amber-100 dark:bg-amber-500/20',
+            color: 'text-[var(--warning)]',
+            bgColor: 'bg-warning-soft',
         },
         {
             id: 'help',
             icon: HelpCircle,
             label: 'Help & Support',
             description: 'FAQ & contact us',
-            color: 'text-green-500',
-            bgColor: 'bg-green-100 dark:bg-green-500/20',
+            color: 'text-[var(--success)]',
+            bgColor: 'bg-success-soft',
         },
     ];
 
     return (
         <MobileLayout activeTab="profile">
             {/* Header */}
-            <div className="bg-gradient-to-b from-primary/10 to-background px-4 pt-12 pb-8">
+            <div className="px-4 md:px-0 pt-12 md:pt-0 pb-8">
                 <div className="flex items-center gap-4 mb-6">
                     <button
                         onClick={() => router.push('/dashboard')}
-                        className="p-2 rounded-full bg-muted hover:bg-secondary transition-colors"
+                        className="btn-haptic p-2 rounded-full bg-surface hover:bg-surface-2 transition-colors"
+                        aria-label="Back"
                     >
                         <ArrowLeft className="w-5 h-5" />
                     </button>
-                    <h1 className="text-xl font-semibold">Profile</h1>
+                    <h1 className="text-title-1">Profile</h1>
                 </div>
 
                 {/* Profile Card */}
-                <div className="bg-card rounded-2xl p-6 border border-border shadow-sm">
+                <div className="ios-card-elev p-6">
                     <div className="flex items-center gap-4 mb-4">
-                        <div className="w-16 h-16 rounded-full bg-gradient-to-br from-primary to-accent flex items-center justify-center text-white text-2xl font-bold">
+                        <div className="w-16 h-16 rounded-full bg-foreground text-background flex items-center justify-center text-title-2 font-bold font-display">
                             {user?.email?.address?.[0]?.toUpperCase() || 'U'}
                         </div>
                         <div className="flex-1">
-                            <h2 className="font-semibold text-lg">
+                            <h2 className="text-title-3">
                                 {user?.email?.address?.split('@')[0] || 'User'}
                             </h2>
-                            <p className="text-sm text-muted-foreground">
+                            <p className="text-footnote text-muted-foreground">
                                 {user?.email?.address || 'No email'}
                             </p>
                         </div>
@@ -126,19 +127,22 @@ export default function ProfilePage() {
 
                     {/* Wallet Address */}
                     <div className="bg-muted rounded-xl p-4">
-                        <p className="text-xs text-muted-foreground mb-1">Wallet Address</p>
+                        <p className="text-caption uppercase tracking-wider text-muted-foreground mb-1">
+                            Wallet Address
+                        </p>
                         <div className="flex items-center justify-between">
-                            <p className="font-mono text-sm">
+                            <p className="font-mono text-subhead">
                                 {user?.wallet?.address
-                                    ? `${user.wallet.address.slice(0, 10)}...${user.wallet.address.slice(-8)}`
+                                    ? `${user.wallet.address.slice(0, 10)}…${user.wallet.address.slice(-8)}`
                                     : 'Not connected'}
                             </p>
                             <button
                                 onClick={copyAddress}
-                                className="p-2 rounded-lg bg-background hover:bg-secondary transition-colors"
+                                className="btn-haptic p-2 rounded-lg bg-background hover:bg-surface transition-colors"
+                                aria-label="Copy address"
                             >
                                 {copied ? (
-                                    <Check className="w-4 h-4 text-green-500" />
+                                    <Check className="w-4 h-4 text-[var(--success)]" />
                                 ) : (
                                     <Copy className="w-4 h-4 text-muted-foreground" />
                                 )}
@@ -150,18 +154,18 @@ export default function ProfilePage() {
 
             <div className="px-4 space-y-4">
                 {/* Theme Toggle */}
-                <div className="bg-card rounded-2xl border border-border overflow-hidden">
+                <div className="ios-card overflow-hidden">
                     <button
                         onClick={toggleDarkMode}
                         className="w-full p-4 flex items-center justify-between"
                     >
                         <div className="flex items-center gap-4">
-                            <div className={`w-11 h-11 rounded-xl flex items-center justify-center ${isDarkMode ? 'bg-indigo-100 dark:bg-indigo-500/20' : 'bg-amber-100'
+                            <div className={`w-11 h-11 rounded-xl flex items-center justify-center ${isDarkMode ? 'bg-info-soft' : 'bg-warning-soft'
                                 }`}>
                                 {isDarkMode ? (
-                                    <Moon className="w-5 h-5 text-indigo-500" />
+                                    <Moon className="w-5 h-5 text-[var(--info)]" />
                                 ) : (
-                                    <Sun className="w-5 h-5 text-amber-500" />
+                                    <Sun className="w-5 h-5 text-[var(--warning)]" />
                                 )}
                             </div>
                             <div className="text-left">
@@ -171,16 +175,18 @@ export default function ProfilePage() {
                                 </p>
                             </div>
                         </div>
-                        <div className={`w-12 h-7 rounded-full p-1 transition-colors ${isDarkMode ? 'bg-primary' : 'bg-muted'
-                            }`}>
-                            <div className={`w-5 h-5 rounded-full bg-white shadow transition-transform ${isDarkMode ? 'translate-x-5' : 'translate-x-0'
-                                }`} />
+                        <div
+                            className={`ios-switch ${isDarkMode ? 'on' : ''}`}
+                            role="switch"
+                            aria-checked={isDarkMode}
+                        >
+                            <div className="ios-switch-thumb" />
                         </div>
                     </button>
                 </div>
 
                 {/* Menu Items */}
-                <div className="bg-card rounded-2xl border border-border overflow-hidden divide-y divide-border">
+                <div className="ios-card overflow-hidden divide-y divide-border">
                     {menuItems.map((item) => {
                         const Icon = item.icon;
                         return (
@@ -208,15 +214,15 @@ export default function ProfilePage() {
                     href={`https://testnet.monadscan.com/address/${user?.wallet?.address}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex items-center justify-between p-4 bg-card rounded-2xl border border-border hover:bg-muted transition-colors"
+                    className="flex items-center justify-between p-4 ios-card hover:bg-muted transition-colors"
                 >
                     <div className="flex items-center gap-4">
-                        <div className="w-11 h-11 rounded-xl flex items-center justify-center bg-purple-100 dark:bg-purple-500/20">
-                            <ExternalLink className="w-5 h-5 text-purple-500" />
+                        <div className="w-11 h-11 rounded-xl flex items-center justify-center bg-info-soft">
+                            <ExternalLink className="w-5 h-5 text-[var(--info)]" />
                         </div>
                         <div>
                             <p className="font-medium">View on Explorer</p>
-                            <p className="text-sm text-muted-foreground">Monad Testnet</p>
+                            <p className="text-sm text-muted-foreground">Monad Mainnet</p>
                         </div>
                     </div>
                     <ChevronRight className="w-5 h-5 text-muted-foreground" />
@@ -226,15 +232,15 @@ export default function ProfilePage() {
                 <Button
                     onClick={handleLogout}
                     variant="outline"
-                    className="w-full py-6 rounded-2xl border-red-200 dark:border-red-900 text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10"
+                    className="action-pill w-full !h-14 text-[var(--destructive)] hover:bg-destructive-soft"
                 >
                     <LogOut className="w-5 h-5 mr-2" />
                     Log Out
                 </Button>
 
                 {/* Version */}
-                <p className="text-center text-sm text-muted-foreground py-4">
-                    GoldaFinance v1.0.0 • Built on Monad
+                <p className="text-center text-footnote text-muted-foreground py-4">
+                    GoldaFinance v1.0.0 · Built on Monad
                 </p>
             </div>
         </MobileLayout>

@@ -66,7 +66,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
         appearance: {
           theme: 'light',
           accentColor: '#F59E0B',
-          logo: '/golda-logo.png',
+          logo: '/aureo-logo.svg',
           showWalletLoginFirst: false,
         },
 

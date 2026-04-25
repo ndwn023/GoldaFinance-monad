@@ -248,7 +248,7 @@ export default function SwapPage() {
   if (!ready || !authenticated) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
-        <Loader2 className="w-10 h-10 animate-spin text-primary" />
+        <Loader2 className="w-10 h-10 animate-spin text-foreground" />
       </div>
     );
   }
@@ -271,7 +271,7 @@ export default function SwapPage() {
         </div>
 
         {/* From token + amount */}
-        <div className="bg-card rounded-2xl p-4 border border-border shadow-sm space-y-3">
+        <div className="ios-card p-4 shadow-sm space-y-3">
           <div className="flex items-center justify-between">
             <span className="text-sm text-muted-foreground">From</span>
             <button
@@ -326,14 +326,15 @@ export default function SwapPage() {
           <button
             onClick={handleSwapTokens}
             disabled={executing}
-            className="w-10 h-10 rounded-full bg-primary/10 border border-border flex items-center justify-center hover:bg-primary/20 transition-colors"
+            className="btn-haptic w-10 h-10 rounded-full bg-surface border border-border flex items-center justify-center hover:bg-surface-2 transition-colors"
+            aria-label="Swap direction"
           >
-            <ArrowDownUp className="w-5 h-5 text-primary" />
+            <ArrowDownUp className="w-5 h-5 text-foreground" />
           </button>
         </div>
 
         {/* To token */}
-        <div className="bg-card rounded-2xl p-4 border border-border shadow-sm space-y-3">
+        <div className="ios-card p-4 shadow-sm space-y-3">
           <div className="flex items-center justify-between">
             <span className="text-sm text-muted-foreground">To (estimated)</span>
             <button
@@ -382,9 +383,9 @@ export default function SwapPage() {
 
         {/* Quote details */}
         {quote && (
-          <div className="mt-4 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30 border border-blue-200/50 dark:border-blue-800/30 rounded-2xl p-4">
+          <div className="mt-4 bg-info-soft border border-border/50 dark:border-border/30 rounded-2xl p-4">
             <div className="flex items-start gap-3">
-              <Zap className="w-5 h-5 text-blue-500 mt-0.5 shrink-0" />
+              <Zap className="w-5 h-5 text-[var(--info)] mt-0.5 shrink-0" />
               <div className="space-y-2 text-sm w-full">
                 <p className="font-medium text-foreground">Route via {quote.toolUsed}</p>
                 <div className="space-y-1 text-muted-foreground">
@@ -414,7 +415,7 @@ export default function SwapPage() {
 
         {/* Error */}
         {error && (
-          <div className="mt-4 flex items-center gap-2 text-red-500 text-sm bg-red-50 dark:bg-red-500/10 p-4 rounded-xl">
+          <div className="mt-4 flex items-center gap-2 text-[var(--destructive)] text-sm bg-destructive-soft p-4 rounded-xl">
             <AlertCircle className="w-5 h-5 shrink-0" />
             <p>{error}</p>
           </div>
@@ -422,7 +423,7 @@ export default function SwapPage() {
 
         {/* Success */}
         {swapStatus?.status === 'DONE' && txHash && (
-          <div className="mt-4 flex items-center gap-2 text-green-500 text-sm bg-green-50 dark:bg-green-500/10 p-4 rounded-xl">
+          <div className="mt-4 flex items-center gap-2 text-[var(--success)] text-sm bg-success-soft p-4 rounded-xl">
             <CheckCircle2 className="w-5 h-5 shrink-0" />
             <div className="flex-1">
               <p className="font-medium">Swap completed!</p>
@@ -430,7 +431,7 @@ export default function SwapPage() {
                 href={explorerUrl!}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-xs text-green-600 dark:text-green-400 hover:underline flex items-center gap-1"
+                className="text-xs text-[var(--success)] dark:text-[var(--success)] hover:underline flex items-center gap-1"
               >
                 View on MonadScan <ExternalLink className="w-3 h-3" />
               </a>
@@ -440,7 +441,7 @@ export default function SwapPage() {
 
         {/* Pending */}
         {swapStatus?.status === 'PENDING' && txHash && (
-          <div className="mt-4 flex items-center gap-2 text-amber-500 text-sm bg-amber-50 dark:bg-amber-500/10 p-4 rounded-xl">
+          <div className="mt-4 flex items-center gap-2 text-[var(--warning)] text-sm bg-warning-soft p-4 rounded-xl">
             <Loader2 className="w-5 h-5 animate-spin shrink-0" />
             <div className="flex-1">
               <p className="font-medium">Swap pending...</p>
@@ -448,7 +449,7 @@ export default function SwapPage() {
                 href={explorerUrl!}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-xs text-amber-600 dark:text-amber-400 hover:underline flex items-center gap-1"
+                className="text-xs text-[var(--warning)] dark:text-[var(--warning)] hover:underline flex items-center gap-1"
               >
                 View on MonadScan <ExternalLink className="w-3 h-3" />
               </a>
@@ -458,7 +459,7 @@ export default function SwapPage() {
 
         {/* Failed */}
         {swapStatus?.status === 'FAILED' && (
-          <div className="mt-4 flex items-center gap-2 text-red-500 text-sm bg-red-50 dark:bg-red-500/10 p-4 rounded-xl">
+          <div className="mt-4 flex items-center gap-2 text-[var(--destructive)] text-sm bg-destructive-soft p-4 rounded-xl">
             <AlertCircle className="w-5 h-5 shrink-0" />
             <p className="font-medium">Swap failed. Please try again.</p>
           </div>
@@ -469,7 +470,7 @@ export default function SwapPage() {
           <Button
             onClick={handleExecuteSwap}
             disabled={!quote || parsedAmount <= 0 || executing || !walletAddress}
-            className="w-full py-6 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-600/20 text-base font-semibold"
+            className="action-pill primary w-full !h-14"
           >
             {executing ? (
               <>
@@ -505,7 +506,7 @@ export default function SwapPage() {
             >
               <Button
                 variant="outline"
-                className="w-full py-5 rounded-2xl border-blue-200 dark:border-blue-800 hover:bg-blue-50 dark:hover:bg-blue-950/30 text-blue-600 dark:text-blue-400"
+                className="action-pill w-full !h-12"
               >
                 <ExternalLink className="w-4 h-4 mr-2" />
                 Open in Jumper Exchange

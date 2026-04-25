@@ -157,7 +157,7 @@ export default function DashboardPage() {
         return (
             <div className="min-h-screen flex items-center justify-center bg-background">
                 <div className="text-center space-y-4">
-                    <Loader2 className="w-10 h-10 animate-spin text-primary mx-auto" />
+                    <Loader2 className="w-10 h-10 animate-spin text-foreground mx-auto" />
                     <p className="text-muted-foreground">Loading...</p>
                 </div>
             </div>
@@ -168,13 +168,13 @@ export default function DashboardPage() {
         switch (type) {
             case 'deposit':
             case 'claim':
-                return <ArrowDownLeft className="w-5 h-5 text-green-500" />;
+                return <ArrowDownLeft className="w-5 h-5 text-[var(--success)]" />;
             case 'withdraw_request':
-                return <ArrowUpRight className="w-5 h-5 text-orange-500" />;
+                return <ArrowUpRight className="w-5 h-5 text-[var(--warning)]" />;
             case 'swap':
-                return <Sparkles className="w-5 h-5 text-blue-500" />;
+                return <Sparkles className="w-5 h-5 text-[var(--info)]" />;
             default:
-                return <Sparkles className="w-5 h-5 text-amber-500" />;
+                return <Sparkles className="w-5 h-5 text-[var(--accent)]" />;
         }
     };
 
@@ -182,41 +182,88 @@ export default function DashboardPage() {
         switch (type) {
             case 'deposit':
             case 'claim':
-                return 'bg-green-100 dark:bg-green-500/20';
+                return 'bg-success-soft';
             case 'withdraw_request':
-                return 'bg-orange-100 dark:bg-orange-500/20';
+                return 'bg-warning-soft';
             case 'swap':
-                return 'bg-blue-100 dark:bg-blue-500/20';
+                return 'bg-info-soft';
             default:
-                return 'bg-amber-100 dark:bg-amber-500/20';
+                return 'bg-destructive-soft';
         }
     };
 
     const pendingWithdrawals = withdrawals.filter(w => !w.settled);
 
+    // Right rail (≥lg desktop only) — sticky vault NAV summary.
+    const desktopRail = (
+        <div className="space-y-4 stagger-in">
+            <div className="ios-card-elev p-5">
+                <p className="section-label mb-2">Vault NAV</p>
+                <div className="flex items-baseline gap-2">
+                    <span className="text-large-title font-num">
+                        ${balances.navUSDC.toFixed(2)}
+                    </span>
+                    <span className="chip chip-success">
+                        <TrendingUp className="w-3 h-3" /> Live
+                    </span>
+                </div>
+                <div className="mt-4 grid grid-cols-2 gap-3">
+                    <div>
+                        <p className="section-label">Share Price</p>
+                        <p className="text-title-3 font-num">
+                            ${balances.sharePrice.toFixed(4)}
+                        </p>
+                    </div>
+                    <div>
+                        <p className="section-label">Your Shares</p>
+                        <p className="text-title-3 font-num">
+                            {balances.shares.toFixed(4)}
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <div className="ios-card p-5">
+                <p className="section-label mb-3">Network</p>
+                <p className="text-headline">Monad Mainnet</p>
+                <div className="mt-3 space-y-1 text-footnote text-muted-foreground font-mono break-all">
+                    <p>Vault: {contractAddresses.GOLDA_VAULT}</p>
+                    <p>USDC: {contractAddresses.USDC}</p>
+                    {walletAddress && <p>You: {walletAddress}</p>}
+                </div>
+            </div>
+        </div>
+    );
+
     return (
-        <MobileLayout activeTab="home">
+        <MobileLayout activeTab="home" rail={desktopRail}>
             {/* Notification Toast */}
             {notification && (
-                <div className={`fixed top-4 left-4 right-4 z-50 p-4 rounded-xl shadow-lg flex items-center gap-3 animate-fade-in ${
-                    notification.type === 'success'
-                        ? 'bg-green-500 text-white'
-                        : notification.type === 'error'
-                          ? 'bg-red-500 text-white'
-                          : 'bg-blue-500 text-white'
-                }`}>
-                    {notification.type === 'success' && <CheckCircle2 className="w-5 h-5" />}
-                    {notification.type === 'error' && <AlertCircle className="w-5 h-5" />}
-                    <p className="text-sm font-medium flex-1">{notification.message}</p>
+                <div
+                    className={`toast-ios ${
+                        notification.type === 'success'
+                            ? 'bg-[var(--success)] text-white'
+                            : notification.type === 'error'
+                              ? 'bg-[var(--destructive)] text-white'
+                              : 'bg-foreground text-background'
+                    }`}
+                >
+                    {notification.type === 'success' && (
+                        <CheckCircle2 className="w-5 h-5" />
+                    )}
+                    {notification.type === 'error' && (
+                        <AlertCircle className="w-5 h-5" />
+                    )}
+                    <p className="flex-1">{notification.message}</p>
                 </div>
             )}
 
             {/* Header */}
-            <div className="bg-gradient-to-b from-primary/5 to-background px-4 pt-12 pb-6">
+            <div className="px-4 md:px-0 pt-12 md:pt-0 pb-6">
                 <div className="flex items-center justify-between mb-6">
                     <div>
-                        <p className="text-muted-foreground text-sm">Welcome back 👋</p>
-                        <h1 className="text-xl font-bold text-foreground">
+                        <p className="section-label">Welcome back</p>
+                        <h1 className="text-title-1">
                             {user?.email?.address?.split('@')[0] || 'User'}
                         </h1>
                     </div>
@@ -227,16 +274,23 @@ export default function DashboardPage() {
                                 refetchTx();
                             }}
                             disabled={contractLoading}
-                            className="p-2.5 rounded-xl bg-muted hover:bg-secondary transition-colors"
+                            className="btn-haptic p-2.5 rounded-full bg-surface hover:bg-surface-2 transition-colors"
+                            aria-label="Refresh"
                         >
-                            <RefreshCw className={`w-5 h-5 text-foreground ${contractLoading ? 'animate-spin' : ''}`} />
+                            <RefreshCw
+                                className={`w-5 h-5 text-foreground ${contractLoading ? 'animate-spin' : ''}`}
+                            />
                         </button>
-                        <button className="p-2.5 rounded-xl bg-muted hover:bg-secondary transition-colors relative">
+                        <button
+                            className="btn-haptic p-2.5 rounded-full bg-surface hover:bg-surface-2 transition-colors"
+                            aria-label="Notifications"
+                        >
                             <Bell className="w-5 h-5 text-foreground" />
                         </button>
                         <button
                             onClick={() => router.push('/dashboard/profile')}
-                            className="p-2.5 rounded-xl bg-muted hover:bg-secondary transition-colors"
+                            className="btn-haptic p-2.5 rounded-full bg-surface hover:bg-surface-2 transition-colors"
+                            aria-label="Settings"
                         >
                             <Settings className="w-5 h-5 text-foreground" />
                         </button>
@@ -249,24 +303,24 @@ export default function DashboardPage() {
                     sharePrice={balances.sharePrice}
                     assetLabel={selectedAsset}
                     walletAddress={walletAddress}
-                    variant="gold"
+                    variant="ink"
                 />
             </div>
 
-            <div className="px-4 space-y-6 animate-fade-in">
+            <div className="px-4 md:px-0 space-y-6 animate-fade-in">
                 {contractError && (
-                    <div className="bg-red-50 dark:bg-red-900/20 rounded-xl p-4 flex items-center gap-3 text-red-600 dark:text-red-400">
+                    <div className="ios-card p-4 flex items-center gap-3 text-[var(--destructive)] bg-destructive-soft">
                         <AlertCircle className="w-5 h-5 shrink-0" />
-                        <p className="text-sm">{contractError}</p>
+                        <p className="text-subhead">{contractError}</p>
                     </div>
                 )}
 
                 {/* Asset selector */}
-                <div className="bg-card rounded-2xl p-4 border border-border shadow-sm">
+                <div className="ios-card-elev p-4">
                     <div className="flex items-center justify-between mb-3">
                         <div>
-                            <h3 className="font-semibold">Savings Asset</h3>
-                            <p className="text-xs text-muted-foreground">
+                            <h3 className="text-headline">Savings Asset</h3>
+                            <p className="text-footnote text-muted-foreground">
                                 Operator routes your USDC into this asset
                             </p>
                         </div>
@@ -277,59 +331,83 @@ export default function DashboardPage() {
                                 { id: 'XAUT', label: 'XAUt0', desc: 'Tether Gold' },
                                 { id: 'WBTC', label: 'BTC', desc: 'Wrapped BTC' },
                             ] as const
-                        ).map((opt) => (
-                            <button
-                                key={opt.id}
-                                onClick={() => persistAsset(opt.id)}
-                                className={`rounded-xl border p-3 text-left transition-colors ${
-                                    selectedAsset === opt.id
-                                        ? 'border-primary bg-primary/10'
-                                        : 'border-border hover:bg-muted'
-                                }`}
-                            >
-                                <p className="font-semibold text-sm">{opt.label}</p>
-                                <p className="text-xs text-muted-foreground">{opt.desc}</p>
-                            </button>
-                        ))}
+                        ).map((opt) => {
+                            const active = selectedAsset === opt.id;
+                            return (
+                                <button
+                                    key={opt.id}
+                                    onClick={() => persistAsset(opt.id)}
+                                    className={`btn-haptic rounded-xl border p-3 text-left transition-colors ${
+                                        active
+                                            ? 'border-foreground bg-foreground text-background'
+                                            : 'border-border hover:bg-surface'
+                                    }`}
+                                >
+                                    <p className="text-subhead font-semibold">
+                                        {opt.label}
+                                    </p>
+                                    <p
+                                        className={`text-footnote ${
+                                            active
+                                                ? 'text-background/70'
+                                                : 'text-muted-foreground'
+                                        }`}
+                                    >
+                                        {opt.desc}
+                                    </p>
+                                </button>
+                            );
+                        })}
                     </div>
                 </div>
 
                 {/* Quick Actions */}
-                <div className="bg-card rounded-2xl p-4 border border-border shadow-sm">
+                <div className="ios-card-elev p-4">
                     <QuickActions />
                 </div>
 
-                {/* Portfolio Summary */}
-                <div className="grid grid-cols-2 gap-3">
-                    <div className="bg-card rounded-2xl p-4 border border-border">
-                        <p className="text-xs text-muted-foreground mb-1">Vault Shares</p>
-                        <p className="text-xl font-bold text-foreground">{balances.shares.toFixed(4)}</p>
-                        <p className="text-sm text-green-500">≈ ${balances.shareValueUSDC.toFixed(2)}</p>
+                {/* Portfolio Summary — visible on mobile only (desktop uses rail) */}
+                <div className="grid grid-cols-2 gap-3 lg:hidden">
+                    <div className="ios-card p-4">
+                        <p className="section-label mb-1">Vault Shares</p>
+                        <p className="text-title-2 font-num">
+                            {balances.shares.toFixed(4)}
+                        </p>
+                        <p className="text-footnote text-[var(--success)]">
+                            ≈ ${balances.shareValueUSDC.toFixed(2)}
+                        </p>
                     </div>
-                    <div className="bg-card rounded-2xl p-4 border border-border">
-                        <p className="text-xs text-muted-foreground mb-1">USDC Balance</p>
-                        <p className="text-xl font-bold text-foreground">${balances.usdc.toFixed(2)}</p>
-                        <p className="text-sm text-muted-foreground">Liquid cash</p>
+                    <div className="ios-card p-4">
+                        <p className="section-label mb-1">USDC Balance</p>
+                        <p className="text-title-2 font-num">
+                            ${balances.usdc.toFixed(2)}
+                        </p>
+                        <p className="text-footnote text-muted-foreground">
+                            Liquid cash
+                        </p>
                     </div>
                 </div>
 
-                {/* Vault NAV & share price */}
-                <div className="bg-card rounded-2xl p-4 border border-border shadow-sm">
+                {/* Vault NAV & share price — mobile only (desktop uses rail) */}
+                <div className="ios-card-elev p-4 lg:hidden">
                     <div className="flex items-center justify-between mb-2">
-                        <h3 className="font-semibold">Vault NAV</h3>
-                        <div className="flex items-center gap-1 text-green-500 bg-green-100 dark:bg-green-500/20 px-2 py-1 rounded-lg">
-                            <TrendingUp className="w-4 h-4" />
-                            <span className="text-xs font-medium">Live</span>
-                        </div>
+                        <h3 className="text-headline">Vault NAV</h3>
+                        <span className="chip chip-success">
+                            <TrendingUp className="w-3 h-3" /> Live
+                        </span>
                     </div>
                     <div className="grid grid-cols-2 gap-3">
                         <div>
-                            <p className="text-xs text-muted-foreground">Total NAV</p>
-                            <p className="text-xl font-bold">${balances.navUSDC.toFixed(2)}</p>
+                            <p className="section-label">Total NAV</p>
+                            <p className="text-title-3 font-num">
+                                ${balances.navUSDC.toFixed(2)}
+                            </p>
                         </div>
                         <div>
-                            <p className="text-xs text-muted-foreground">Share price</p>
-                            <p className="text-xl font-bold">${balances.sharePrice.toFixed(4)}</p>
+                            <p className="section-label">Share price</p>
+                            <p className="text-title-3 font-num">
+                                ${balances.sharePrice.toFixed(4)}
+                            </p>
                         </div>
                     </div>
                 </div>
@@ -346,7 +424,7 @@ export default function DashboardPage() {
                     >
                         <Button
                             disabled={isProcessing || !isConnected}
-                            className="w-full py-6 rounded-2xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white shadow-lg shadow-amber-500/20"
+                            className="action-pill primary w-full !h-14"
                         >
                             <Coins className="w-5 h-5 mr-2" />
                             Deposit
@@ -362,7 +440,7 @@ export default function DashboardPage() {
                         <Button
                             disabled={isProcessing || !isConnected || balances.shares <= 0}
                             variant="outline"
-                            className="w-full py-6 rounded-2xl border-amber-200 dark:border-amber-800 hover:bg-amber-50 dark:hover:bg-amber-950/30"
+                            className="action-pill w-full !h-14"
                         >
                             <TrendingUp className="w-5 h-5 mr-2" />
                             Withdraw
@@ -372,12 +450,13 @@ export default function DashboardPage() {
 
                 {/* Pending withdrawals / claims */}
                 {withdrawals.length > 0 && (
-                    <div className="bg-card rounded-2xl border border-border shadow-sm overflow-hidden">
+                    <div className="ios-list">
                         <div className="flex items-center justify-between p-4 border-b border-border">
                             <div>
-                                <h3 className="font-semibold">Withdrawal Queue</h3>
-                                <p className="text-xs text-muted-foreground">
-                                    {pendingWithdrawals.length} pending, {withdrawals.length - pendingWithdrawals.length} settled
+                                <h3 className="text-headline">Withdrawal Queue</h3>
+                                <p className="text-footnote text-muted-foreground">
+                                    {pendingWithdrawals.length} pending,{' '}
+                                    {withdrawals.length - pendingWithdrawals.length} settled
                                 </p>
                             </div>
                             <Hourglass className="w-5 h-5 text-muted-foreground" />
@@ -385,23 +464,33 @@ export default function DashboardPage() {
                         <div className="divide-y divide-border max-h-64 overflow-y-auto">
                             {withdrawals.map((w) => (
                                 <div key={w.id} className="p-4 flex items-center gap-3">
-                                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
-                                        w.settled
-                                            ? 'bg-gray-100 dark:bg-gray-800'
-                                            : w.claimable
-                                                ? 'bg-green-100 dark:bg-green-500/20'
-                                                : 'bg-amber-100 dark:bg-amber-500/20'
-                                    }`}>
-                                        {w.settled
-                                            ? <CheckCircle2 className="w-5 h-5 text-muted-foreground" />
-                                            : w.claimable
-                                                ? <ArrowDownLeft className="w-5 h-5 text-green-500" />
-                                                : <Hourglass className="w-5 h-5 text-amber-500" />}
+                                    <div
+                                        className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                                            w.settled
+                                                ? 'bg-surface-2'
+                                                : w.claimable
+                                                  ? 'bg-success-soft'
+                                                  : 'bg-warning-soft'
+                                        }`}
+                                    >
+                                        {w.settled ? (
+                                            <CheckCircle2 className="w-5 h-5 text-muted-foreground" />
+                                        ) : w.claimable ? (
+                                            <ArrowDownLeft className="w-5 h-5 text-[var(--success)]" />
+                                        ) : (
+                                            <Hourglass className="w-5 h-5 text-[var(--warning)]" />
+                                        )}
                                     </div>
                                     <div className="flex-1 min-w-0">
-                                        <p className="font-medium">#{w.id} · ${w.usdcOwed.toFixed(2)} USDC</p>
-                                        <p className="text-xs text-muted-foreground">
-                                            {w.settled ? 'Settled' : w.claimable ? 'Ready to claim' : 'Waiting for liquidity'}
+                                        <p className="text-headline">
+                                            #{w.id} · ${w.usdcOwed.toFixed(2)} USDC
+                                        </p>
+                                        <p className="text-footnote text-muted-foreground">
+                                            {w.settled
+                                                ? 'Settled'
+                                                : w.claimable
+                                                  ? 'Ready to claim'
+                                                  : 'Waiting for liquidity'}
                                         </p>
                                     </div>
                                     {!w.settled && (
@@ -409,7 +498,7 @@ export default function DashboardPage() {
                                             onClick={() => handleClaim(w.id)}
                                             disabled={!w.claimable || claimingId === w.id}
                                             size="sm"
-                                            className="rounded-xl"
+                                            className="rounded-full"
                                         >
                                             {claimingId === w.id ? (
                                                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -425,12 +514,12 @@ export default function DashboardPage() {
                 )}
 
                 {/* Recent Transactions */}
-                <div className="bg-card rounded-2xl border border-border shadow-sm overflow-hidden">
+                <div className="ios-list">
                     <div className="flex items-center justify-between p-4 border-b border-border">
-                        <h3 className="font-semibold text-foreground">Recent Activity</h3>
+                        <h3 className="text-headline">Recent Activity</h3>
                         <button
                             onClick={() => router.push('/dashboard/history')}
-                            className="text-sm text-primary font-medium flex items-center gap-1"
+                            className="btn-haptic text-subhead font-semibold flex items-center gap-1 hover:opacity-70"
                         >
                             See All
                             <ChevronRight className="w-4 h-4" />
@@ -440,33 +529,45 @@ export default function DashboardPage() {
                     <div className="divide-y divide-border">
                         {txLoading ? (
                             <div className="p-8 text-center">
-                                <Loader2 className="w-6 h-6 animate-spin text-primary mx-auto" />
+                                <Loader2 className="w-6 h-6 animate-spin text-foreground mx-auto" />
                             </div>
                         ) : transactions.length > 0 ? (
                             transactions.slice(0, 4).map((tx) => {
                                 const { time } = formatTransactionDate(tx.timestamp);
                                 return (
-                                    <div key={tx.id} className="p-4 flex items-center gap-3">
-                                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${getTxBg(tx.type)}`}>
+                                    <div
+                                        key={tx.id}
+                                        className="p-4 flex items-center gap-3"
+                                    >
+                                        <div
+                                            className={`w-10 h-10 rounded-xl flex items-center justify-center ${getTxBg(tx.type)}`}
+                                        >
                                             {getTxIcon(tx.type)}
                                         </div>
                                         <div className="flex-1 min-w-0">
-                                            <p className="font-medium text-foreground truncate">{tx.description}</p>
-                                            <p className="text-sm text-muted-foreground">{time}</p>
+                                            <p className="text-headline truncate">
+                                                {tx.description}
+                                            </p>
+                                            <p className="text-footnote text-muted-foreground">
+                                                {time}
+                                            </p>
                                         </div>
                                         <div className="text-right">
-                                            <p className={`font-semibold ${
-                                                tx.type === 'deposit' || tx.type === 'claim'
-                                                    ? 'text-green-500'
-                                                    : 'text-foreground'
-                                            }`}>
+                                            <p
+                                                className={`text-subhead font-semibold font-num ${
+                                                    tx.type === 'deposit' ||
+                                                    tx.type === 'claim'
+                                                        ? 'text-[var(--success)]'
+                                                        : 'text-foreground'
+                                                }`}
+                                            >
                                                 ${tx.amount.toFixed(2)}
                                             </p>
                                             <a
                                                 href={`${explorerUrl}/tx/${tx.txHash}`}
                                                 target="_blank"
                                                 rel="noopener noreferrer"
-                                                className="text-xs text-muted-foreground hover:text-primary flex items-center gap-1 justify-end"
+                                                className="text-caption text-muted-foreground hover:text-foreground flex items-center gap-1 justify-end"
                                             >
                                                 View <ExternalLink className="w-3 h-3" />
                                             </a>
@@ -477,19 +578,29 @@ export default function DashboardPage() {
                         ) : (
                             <div className="p-8 text-center">
                                 <Sparkles className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
-                                <p className="text-muted-foreground text-sm">No activity yet</p>
-                                <p className="text-xs text-muted-foreground mt-1">Deposit USDC to get started!</p>
+                                <p className="text-subhead text-muted-foreground">
+                                    No activity yet
+                                </p>
+                                <p className="text-footnote text-muted-foreground mt-1">
+                                    Deposit USDC to get started!
+                                </p>
                             </div>
                         )}
                     </div>
                 </div>
 
-                {/* Contract Info */}
-                <div className="bg-muted/50 rounded-xl p-3 text-xs text-muted-foreground space-y-1">
-                    <p className="font-medium">Network: Monad Mainnet</p>
-                    <p className="font-mono truncate">Vault: {contractAddresses.GOLDA_VAULT}</p>
-                    <p className="font-mono truncate">USDC: {contractAddresses.USDC}</p>
-                    <p className="font-mono truncate">Wallet: {walletAddress || 'Not connected'}</p>
+                {/* Contract info — mobile-only (desktop has it in rail) */}
+                <div className="ios-card p-3 text-footnote text-muted-foreground space-y-1 lg:hidden">
+                    <p className="font-medium text-foreground">Network: Monad Mainnet</p>
+                    <p className="font-mono truncate">
+                        Vault: {contractAddresses.GOLDA_VAULT}
+                    </p>
+                    <p className="font-mono truncate">
+                        USDC: {contractAddresses.USDC}
+                    </p>
+                    <p className="font-mono truncate">
+                        Wallet: {walletAddress || 'Not connected'}
+                    </p>
                 </div>
             </div>
         </MobileLayout>

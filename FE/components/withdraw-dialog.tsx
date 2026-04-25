@@ -58,10 +58,10 @@ export function WithdrawDialog({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>{children}</DialogTrigger>
-      <DialogContent className="sm:max-w-md rounded-3xl border-border bg-card">
+      <DialogContent className="sm:max-w-md rounded-2xl border-border bg-card">
         <DialogHeader className="text-left">
-          <div className="w-14 h-14 rounded-2xl bg-amber-100 dark:bg-amber-500/20 flex items-center justify-center mb-4">
-            <TrendingUp className="w-7 h-7 text-amber-500" />
+          <div className="w-14 h-14 rounded-2xl bg-warning-soft flex items-center justify-center mb-4">
+            <TrendingUp className="w-7 h-7 text-[var(--warning)]" />
           </div>
           <DialogTitle className="text-xl">Request Withdraw</DialogTitle>
           <DialogDescription className="leading-relaxed">
@@ -120,10 +120,10 @@ export function WithdrawDialog({
                     size="sm"
                     onClick={() => setAmount(pctAmount.toFixed(4))}
                     disabled={shares === 0 || isProcessing || isLoading}
-                    className={`font-medium rounded-xl py-5 ${
+                    className={`btn-haptic font-medium rounded-xl py-5 ${
                       amount === pctAmount.toFixed(4)
-                        ? 'border-primary bg-primary/10 text-primary'
-                        : 'border-border hover:bg-muted'
+                        ? 'border-foreground bg-foreground text-background hover:bg-foreground'
+                        : 'border-border hover:bg-surface'
                     }`}
                   >
                     {pct}%
@@ -152,7 +152,7 @@ export function WithdrawDialog({
                 <div className="border-t border-border pt-3">
                   <div className="flex justify-between items-center">
                     <span className="font-medium">Queued USDC claim</span>
-                    <span className="font-bold text-xl text-green-500">
+                    <span className="font-bold text-xl text-[var(--success)]">
                       ${usdcToReceive.toFixed(2)}
                     </span>
                   </div>
@@ -160,18 +160,18 @@ export function WithdrawDialog({
               </div>
 
               {parsedAmount > shares && (
-                <div className="flex items-center gap-2 text-red-500 text-sm bg-red-50 dark:bg-red-500/10 p-4 rounded-xl">
+                <div className="flex items-center gap-2 text-[var(--destructive)] text-sm bg-destructive-soft p-4 rounded-xl">
                   <AlertCircle className="w-5 h-5 shrink-0" />
                   <div>
                     <p className="font-medium">Insufficient Shares</p>
-                    <p className="text-red-400">You only have {shares.toFixed(4)} gUSDC.</p>
+                    <p className="text-[var(--destructive)]">You only have {shares.toFixed(4)} gUSDC.</p>
                   </div>
                 </div>
               )}
 
               {isValidAmount && (
-                <div className="flex items-start gap-2 text-xs text-muted-foreground leading-relaxed bg-blue-50 dark:bg-blue-500/10 p-3 rounded-xl">
-                  <Info className="w-4 h-4 shrink-0 text-blue-500 mt-0.5" />
+                <div className="flex items-start gap-2 text-xs text-muted-foreground leading-relaxed bg-info-soft p-3 rounded-xl">
+                  <Info className="w-4 h-4 shrink-0 text-[var(--info)] mt-0.5" />
                   <span>
                     Your shares are burned immediately and a claim is queued. Once the vault has enough liquid USDC (after the operator unwinds), you can claim from the Withdrawals list.
                   </span>
@@ -196,7 +196,7 @@ export function WithdrawDialog({
           <Button
             onClick={handleRequest}
             disabled={!isValidAmount || isProcessing || isLoading}
-            className="w-full sm:w-auto bg-amber-500 hover:bg-amber-600 text-white rounded-xl py-5"
+            className="action-pill primary w-full sm:w-auto !h-12"
           >
             {isProcessing || isLoading ? (
               <>

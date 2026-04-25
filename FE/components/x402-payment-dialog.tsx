@@ -64,15 +64,15 @@ export function X402PaymentDialog({
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-md rounded-3xl border-border bg-card">
+            <DialogContent className="sm:max-w-md rounded-2xl border-border bg-card">
                 <DialogHeader className="text-left">
-                    <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center mb-4">
+                    <div className="w-14 h-14 rounded-2xl bg-surface flex items-center justify-center mb-4">
                         {status === 'success' ? (
-                            <CheckCircle className="w-7 h-7 text-green-500" />
+                            <CheckCircle className="w-7 h-7 text-[var(--success)]" />
                         ) : status === 'error' ? (
-                            <AlertCircle className="w-7 h-7 text-red-500" />
+                            <AlertCircle className="w-7 h-7 text-[var(--destructive)]" />
                         ) : (
-                            <Shield className="w-7 h-7 text-primary" />
+                            <Shield className="w-7 h-7 text-foreground" />
                         )}
                     </div>
                     <DialogTitle className="text-xl">
@@ -93,8 +93,8 @@ export function X402PaymentDialog({
                     <div className="py-4 space-y-4">
                         {/* x402 Badge */}
                         <div className="flex items-center gap-2 px-3 py-2 bg-primary/5 rounded-xl border border-primary/10">
-                            <Zap className="w-4 h-4 text-primary" />
-                            <span className="text-sm font-medium text-primary">x402 Protocol Payment</span>
+                            <Zap className="w-4 h-4 text-foreground" />
+                            <span className="text-sm font-medium text-foreground">x402 Protocol Payment</span>
                         </div>
 
                         {/* Payment Details */}
@@ -114,7 +114,7 @@ export function X402PaymentDialog({
                             <div className="border-t border-border pt-3">
                                 <div className="flex justify-between items-center">
                                     <span className="font-medium">Total</span>
-                                    <span className="text-xl font-bold text-primary">{amount}</span>
+                                    <span className="text-xl font-bold text-foreground">{amount}</span>
                                 </div>
                             </div>
                         </div>
@@ -129,7 +129,7 @@ export function X402PaymentDialog({
 
                 {status === 'signing' && (
                     <div className="py-8 text-center">
-                        <Loader2 className="w-12 h-12 animate-spin text-primary mx-auto mb-4" />
+                        <Loader2 className="w-12 h-12 animate-spin text-foreground mx-auto mb-4" />
                         <p className="font-medium">Signing payment...</p>
                         <p className="text-sm text-muted-foreground mt-1">
                             Please confirm the signature in your wallet
@@ -150,7 +150,7 @@ export function X402PaymentDialog({
                         <Button
                             onClick={handleConfirm}
                             disabled={isProcessing || status === 'error'}
-                            className="w-full sm:w-auto bg-primary hover:bg-primary/90 text-white rounded-xl py-5"
+                            className="w-full sm:w-auto bg-foreground text-background hover:opacity-90 rounded-xl py-5"
                         >
                             {status === 'error' ? 'Try Again' : `Pay ${amount}`}
                         </Button>

@@ -387,7 +387,7 @@ export default function AgentPage() {
     if (!ready || !authenticated) {
         return (
             <div className="min-h-screen flex items-center justify-center bg-background">
-                <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                <Loader2 className="w-8 h-8 animate-spin text-foreground" />
             </div>
         );
     }
@@ -406,7 +406,7 @@ export default function AgentPage() {
     return (
         <MobileLayout activeTab="agent">
             {/* Header */}
-            <div className="bg-gradient-to-b from-primary/10 to-background px-4 pt-12 pb-6">
+            <div className="bg-background px-4 pt-12 pb-6">
                 <div className="flex items-center gap-4 mb-6">
                     <button
                         onClick={() => router.push('/dashboard')}
@@ -420,16 +420,16 @@ export default function AgentPage() {
                     </div>
                     <div className={`flex items-center gap-1 px-3 py-1.5 rounded-full ${
                         agentEnabled && autoExecute && lifiApproved
-                            ? 'bg-green-100 dark:bg-green-500/20'
-                            : 'bg-amber-100 dark:bg-amber-500/20'
+                            ? 'bg-success-soft'
+                            : 'bg-warning-soft'
                     }`}>
                         <div className={`w-2 h-2 rounded-full animate-pulse ${
-                            agentEnabled && autoExecute && lifiApproved ? 'bg-green-500' : 'bg-amber-500'
+                            agentEnabled && autoExecute && lifiApproved ? 'bg-[var(--success)] hover:opacity-90' : 'bg-[var(--warning)] hover:opacity-90'
                         }`} />
                         <span className={`text-xs font-medium ${
                             agentEnabled && autoExecute && lifiApproved
-                                ? 'text-green-600 dark:text-green-400'
-                                : 'text-amber-600 dark:text-amber-400'
+                                ? 'text-[var(--success)] dark:text-[var(--success)]'
+                                : 'text-[var(--warning)] dark:text-[var(--warning)]'
                         }`}>
                             {agentEnabled && autoExecute && lifiApproved ? 'Active' : 'Setup'}
                         </span>
@@ -438,10 +438,10 @@ export default function AgentPage() {
 
                 {/* Market Insight Banner */}
                 {marketInsight && (
-                    <div className="bg-card rounded-2xl p-4 border border-border mb-4">
+                    <div className="ios-card p-4 mb-4">
                         <div className="flex items-start gap-3">
-                            <div className="w-10 h-10 rounded-xl bg-amber-100 dark:bg-amber-500/20 flex items-center justify-center">
-                                <Sparkles className="w-5 h-5 text-amber-500" />
+                            <div className="w-10 h-10 rounded-xl bg-warning-soft flex items-center justify-center">
+                                <Sparkles className="w-5 h-5 text-[var(--warning)]" />
                             </div>
                             <div className="flex-1">
                                 <p className="text-xs text-muted-foreground mb-1">AI Market Insight</p>
@@ -453,17 +453,17 @@ export default function AgentPage() {
 
                 {/* Stats Overview */}
                 <div className="grid grid-cols-2 gap-3">
-                    <div className="bg-card rounded-2xl p-4 border border-border">
+                    <div className="ios-card p-4">
                         <div className="flex items-center gap-2 mb-2">
-                            <BarChart3 className="w-4 h-4 text-primary" />
+                            <BarChart3 className="w-4 h-4 text-foreground" />
                             <span className="text-xs text-muted-foreground">Gold Price</span>
                         </div>
                         <p className="text-2xl font-bold text-foreground">${goldPrice.toFixed(2)}</p>
                         <p className="text-xs text-muted-foreground mt-1">via Pyth Oracle</p>
                     </div>
-                    <div className="bg-card rounded-2xl p-4 border border-border">
+                    <div className="ios-card p-4">
                         <div className="flex items-center gap-2 mb-2">
-                            <Brain className="w-4 h-4 text-purple-500" />
+                            <Brain className="w-4 h-4 text-[var(--info)]" />
                             <span className="text-xs text-muted-foreground">Analyses</span>
                         </div>
                         <p className="text-2xl font-bold text-foreground">{stats.totalAnalyses}</p>
@@ -480,20 +480,20 @@ export default function AgentPage() {
                 {/* ============================================ */}
                 <div className={`rounded-2xl border-2 overflow-hidden transition-all ${
                     lifiApproved
-                        ? 'border-green-500/50 bg-green-50/30 dark:bg-green-900/10'
-                        : 'border-amber-500/50 bg-amber-50/30 dark:bg-amber-900/10'
+                        ? 'border-[var(--success)]/50 bg-success-soft dark:bg-success-soft'
+                        : 'border-border/50 bg-warning-soft dark:bg-warning-soft'
                 }`}>
                     <div className="p-4 flex items-center justify-between">
                         <div className="flex items-center gap-3">
                             <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
                                 lifiApproved
-                                    ? 'bg-green-100 dark:bg-green-500/20'
-                                    : 'bg-amber-100 dark:bg-amber-500/20'
+                                    ? 'bg-success-soft'
+                                    : 'bg-warning-soft'
                             }`}>
                                 {lifiApproved ? (
-                                    <CheckCircle2 className="w-5 h-5 text-green-500" />
+                                    <CheckCircle2 className="w-5 h-5 text-[var(--success)]" />
                                 ) : (
-                                    <Unlock className="w-5 h-5 text-amber-500" />
+                                    <Unlock className="w-5 h-5 text-[var(--warning)]" />
                                 )}
                             </div>
                             <div>
@@ -512,7 +512,7 @@ export default function AgentPage() {
                                 onClick={handleApproveLiFi}
                                 disabled={approving || checkingApproval}
                                 size="sm"
-                                className="rounded-xl bg-amber-500 hover:bg-amber-600"
+                                className="rounded-xl bg-[var(--warning)] hover:opacity-90"
                             >
                                 {approving ? (
                                     <Loader2 className="w-4 h-4 animate-spin" />
@@ -540,11 +540,11 @@ export default function AgentPage() {
                 </div>
 
                 {/* Current Analysis */}
-                <div className="bg-card rounded-2xl border border-border overflow-hidden">
+                <div className="ios-card overflow-hidden">
                     <div className="p-4 border-b border-border flex items-center justify-between">
                         <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
-                                <Brain className="w-5 h-5 text-primary" />
+                            <div className="w-10 h-10 rounded-xl bg-surface flex items-center justify-center">
+                                <Brain className="w-5 h-5 text-foreground" />
                             </div>
                             <div>
                                 <h3 className="font-semibold">AI Analysis</h3>
@@ -574,17 +574,17 @@ export default function AgentPage() {
                             <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-3">
                                     <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${currentAnalysis.action === 'BUY'
-                                            ? 'bg-green-100 dark:bg-green-500/20'
+                                            ? 'bg-success-soft'
                                             : currentAnalysis.action === 'SELL'
-                                                ? 'bg-red-100 dark:bg-red-500/20'
-                                                : 'bg-amber-100 dark:bg-amber-500/20'
+                                                ? 'bg-destructive-soft'
+                                                : 'bg-warning-soft'
                                         }`}>
                                         {currentAnalysis.action === 'BUY' ? (
-                                            <TrendingUp className="w-6 h-6 text-green-500" />
+                                            <TrendingUp className="w-6 h-6 text-[var(--success)]" />
                                         ) : currentAnalysis.action === 'SELL' ? (
-                                            <TrendingDown className="w-6 h-6 text-red-500" />
+                                            <TrendingDown className="w-6 h-6 text-[var(--destructive)]" />
                                         ) : (
-                                            <Clock className="w-6 h-6 text-amber-500" />
+                                            <Clock className="w-6 h-6 text-[var(--warning)]" />
                                         )}
                                     </div>
                                     <div>
@@ -597,10 +597,10 @@ export default function AgentPage() {
                                 <div className="text-right">
                                     <p className="text-sm text-muted-foreground">Risk</p>
                                     <span className={`text-sm font-medium px-2 py-1 rounded-full ${currentAnalysis.riskLevel === 'low'
-                                            ? 'bg-green-100 text-green-600 dark:bg-green-500/20 dark:text-green-400'
+                                            ? 'bg-success-soft text-[var(--success)] dark:bg-[var(--success)] hover:opacity-90/20 dark:text-[var(--success)]'
                                             : currentAnalysis.riskLevel === 'high'
-                                                ? 'bg-red-100 text-red-600 dark:bg-red-500/20 dark:text-red-400'
-                                                : 'bg-amber-100 text-amber-600 dark:bg-amber-500/20 dark:text-amber-400'
+                                                ? 'bg-destructive-soft text-[var(--destructive)] dark:bg-[var(--destructive)] hover:opacity-90/20 dark:text-[var(--destructive)]'
+                                                : 'bg-warning-soft text-[var(--warning)] dark:bg-[var(--warning)] hover:opacity-90/20 dark:text-[var(--warning)]'
                                         }`}>
                                         {currentAnalysis.riskLevel}
                                     </span>
@@ -618,7 +618,7 @@ export default function AgentPage() {
                                 <Button
                                     onClick={() => executeRecommendation(currentAnalysis)}
                                     disabled={contractLoading || balances.usdc <= 0 || !lifiApproved}
-                                    className="w-full bg-green-500 hover:bg-green-600"
+                                    className="w-full bg-[var(--success)] hover:opacity-90"
                                 >
                                     <ArrowDownUp className="w-4 h-4 mr-2" />
                                     {lifiApproved
@@ -643,7 +643,7 @@ export default function AgentPage() {
                     {/* Loading State */}
                     {isAnalyzing && (
                         <div className="p-8 text-center">
-                            <Loader2 className="w-12 h-12 text-primary mx-auto mb-3 animate-spin" />
+                            <Loader2 className="w-12 h-12 text-foreground mx-auto mb-3 animate-spin" />
                             <p className="text-muted-foreground">Analyzing market conditions...</p>
                             <p className="text-xs text-muted-foreground mt-1">Using Gemini Flash AI</p>
                         </div>
@@ -652,24 +652,24 @@ export default function AgentPage() {
 
                 {/* Error Display */}
                 {error && (
-                    <div className="flex items-center gap-3 p-4 bg-red-50 dark:bg-red-900/20 rounded-xl text-red-600 dark:text-red-400">
+                    <div className="flex items-center gap-3 p-4 bg-destructive-soft rounded-xl text-[var(--destructive)] dark:text-[var(--destructive)]">
                         <AlertCircle className="w-5 h-5 shrink-0" />
                         <p className="text-sm">{error}</p>
                     </div>
                 )}
 
                 {/* Auto-Agent (Works Offline) */}
-                <div className={`rounded-2xl border-2 overflow-hidden transition-all ${agentEnabled && autoExecute && lifiApproved ? 'border-green-500 bg-green-50/50 dark:bg-green-900/10' : 'border-border bg-card'}`}>
+                <div className={`rounded-2xl border-2 overflow-hidden transition-all ${agentEnabled && autoExecute && lifiApproved ? 'border-[var(--success)] bg-success-soft dark:bg-success-soft' : 'border-border bg-card'}`}>
                     <div className="p-4 border-b border-border flex items-center justify-between">
                         <div className="flex items-center gap-3">
-                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${agentEnabled && autoExecute && lifiApproved ? 'bg-green-100 dark:bg-green-500/20' : 'bg-primary/10'}`}>
-                                <Power className={`w-5 h-5 ${agentEnabled && autoExecute && lifiApproved ? 'text-green-500' : 'text-primary'}`} />
+                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${agentEnabled && autoExecute && lifiApproved ? 'bg-success-soft' : 'bg-surface'}`}>
+                                <Power className={`w-5 h-5 ${agentEnabled && autoExecute && lifiApproved ? 'text-[var(--success)]' : 'text-foreground'}`} />
                             </div>
                             <div>
                                 <h3 className="font-semibold flex items-center gap-2">
                                     Auto-Agent
                                     {agentEnabled && autoExecute && lifiApproved && (
-                                        <span className="flex items-center gap-1 text-xs font-normal text-green-600 dark:text-green-400">
+                                        <span className="flex items-center gap-1 text-xs font-normal text-[var(--success)] dark:text-[var(--success)]">
                                             <Wifi className="w-3 h-3" />
                                             Auto-Swap Active
                                         </span>
@@ -684,14 +684,14 @@ export default function AgentPage() {
                                 setAgentEnabled(newEnabled);
                                 if (newEnabled) setAutoExecute(true);
                             }}
-                            className={`w-12 h-7 rounded-full p-1 transition-colors ${agentEnabled ? 'bg-green-500' : 'bg-muted'}`}
+                            className={`w-12 h-7 rounded-full p-1 transition-colors ${agentEnabled ? 'bg-[var(--success)] hover:opacity-90' : 'bg-muted'}`}
                         >
                             <div className={`w-5 h-5 rounded-full bg-white shadow transition-transform ${agentEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
                         </button>
                     </div>
 
                     {agentEnabled && (
-                        <div className="p-4 space-y-4 bg-gradient-to-b from-transparent to-green-50/30 dark:to-green-900/5">
+                        <div className="p-4 space-y-4 bg-success-soft/40">
                             {/* How it works */}
                             <div className="bg-white/50 dark:bg-white/5 rounded-xl p-3 text-xs text-muted-foreground">
                                 <p className="font-medium text-foreground mb-1">How Auto-Agent Works:</p>
@@ -745,7 +745,7 @@ export default function AgentPage() {
                             <div>
                                 <div className="flex items-center justify-between mb-2">
                                     <p className="font-medium text-sm">Max Amount Per Trade</p>
-                                    <span className="text-sm font-bold text-primary">${maxAmountPerTrade}</span>
+                                    <span className="text-sm font-bold text-foreground">${maxAmountPerTrade}</span>
                                 </div>
                                 <input
                                     type="range"
@@ -766,7 +766,7 @@ export default function AgentPage() {
                             <div>
                                 <div className="flex items-center justify-between mb-2">
                                     <p className="font-medium text-sm">Minimum Confidence</p>
-                                    <span className="text-sm font-bold text-primary">{minConfidence}%</span>
+                                    <span className="text-sm font-bold text-foreground">{minConfidence}%</span>
                                 </div>
                                 <input
                                     type="range"
@@ -802,7 +802,7 @@ export default function AgentPage() {
                                 <Button
                                     onClick={saveSettings}
                                     disabled={isSaving}
-                                    className="w-full bg-green-500 hover:bg-green-600"
+                                    className="w-full bg-[var(--success)] hover:opacity-90"
                                 >
                                     {isSaving ? (
                                         <Loader2 className="w-4 h-4 animate-spin mr-2" />
@@ -817,12 +817,12 @@ export default function AgentPage() {
                             {!hasUnsavedChanges && autoExecute && (
                                 <div className="space-y-2">
                                     {lifiApproved ? (
-                                        <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400">
+                                        <div className="flex items-center gap-2 text-sm text-[var(--success)] dark:text-[var(--success)]">
                                             <CheckCircle2 className="w-4 h-4" />
                                             <span>Auto-Agent active — swaps USDC to {targetInfo?.symbol}</span>
                                         </div>
                                     ) : (
-                                        <div className="flex items-center gap-2 text-sm text-amber-600 dark:text-amber-400">
+                                        <div className="flex items-center gap-2 text-sm text-[var(--warning)] dark:text-[var(--warning)]">
                                             <AlertCircle className="w-4 h-4" />
                                             <span>Grant LiFi approval to enable auto-swaps</span>
                                         </div>
@@ -835,10 +835,10 @@ export default function AgentPage() {
 
                 {/* Agent Settings (when Auto-Agent is off) */}
                 {!agentEnabled && (
-                    <div className="bg-card rounded-2xl border border-border overflow-hidden">
+                    <div className="ios-card overflow-hidden">
                         <div className="p-4 border-b border-border flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
-                                <Sliders className="w-5 h-5 text-primary" />
+                            <div className="w-10 h-10 rounded-xl bg-surface flex items-center justify-center">
+                                <Sliders className="w-5 h-5 text-foreground" />
                             </div>
                             <div>
                                 <h3 className="font-semibold">Manual Settings</h3>
@@ -872,7 +872,7 @@ export default function AgentPage() {
                             <div>
                                 <div className="flex items-center justify-between mb-2">
                                     <p className="font-medium text-sm">Minimum Confidence</p>
-                                    <span className="text-sm font-bold text-primary">{minConfidence}%</span>
+                                    <span className="text-sm font-bold text-foreground">{minConfidence}%</span>
                                 </div>
                                 <input
                                     type="range"
@@ -923,14 +923,14 @@ export default function AgentPage() {
                 )}
 
                 {/* AI Chat */}
-                <div className="bg-card rounded-2xl border border-border overflow-hidden">
+                <div className="ios-card overflow-hidden">
                     <button
                         onClick={() => setShowChat(!showChat)}
                         className="w-full p-4 flex items-center justify-between hover:bg-muted/50 transition-colors"
                     >
                         <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-xl bg-purple-100 dark:bg-purple-500/20 flex items-center justify-center">
-                                <MessageSquare className="w-5 h-5 text-purple-500" />
+                            <div className="w-10 h-10 rounded-xl bg-info-soft flex items-center justify-center">
+                                <MessageSquare className="w-5 h-5 text-[var(--info)]" />
                             </div>
                             <div className="text-left">
                                 <h3 className="font-semibold">Chat with AI</h3>
@@ -999,10 +999,10 @@ export default function AgentPage() {
 
                 {/* Analysis History */}
                 {analysisHistory.length > 0 && (
-                    <div className="bg-card rounded-2xl border border-border overflow-hidden">
+                    <div className="ios-card overflow-hidden">
                         <div className="p-4 border-b border-border flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-xl bg-amber-100 dark:bg-amber-500/20 flex items-center justify-center">
-                                <Clock className="w-5 h-5 text-amber-500" />
+                            <div className="w-10 h-10 rounded-xl bg-warning-soft flex items-center justify-center">
+                                <Clock className="w-5 h-5 text-[var(--warning)]" />
                             </div>
                             <h3 className="font-semibold">Recent Analyses</h3>
                         </div>
@@ -1013,8 +1013,8 @@ export default function AgentPage() {
                                     <div className="flex items-center justify-between mb-2">
                                         <div className="flex items-center gap-2">
                                             <span className={`px-2 py-1 rounded-full text-xs font-medium ${entry.analysis.action === 'BUY'
-                                                    ? 'bg-green-100 text-green-600 dark:bg-green-500/20 dark:text-green-400'
-                                                    : 'bg-amber-100 text-amber-600 dark:bg-amber-500/20 dark:text-amber-400'
+                                                    ? 'bg-success-soft text-[var(--success)] dark:bg-[var(--success)] hover:opacity-90/20 dark:text-[var(--success)]'
+                                                    : 'bg-warning-soft text-[var(--warning)] dark:bg-[var(--warning)] hover:opacity-90/20 dark:text-[var(--warning)]'
                                                 }`}>
                                                 {entry.analysis.action}
                                             </span>
@@ -1022,7 +1022,7 @@ export default function AgentPage() {
                                                 {entry.analysis.confidence}%
                                             </span>
                                             {entry.executed && (
-                                                <span className="flex items-center gap-1 text-xs text-green-500">
+                                                <span className="flex items-center gap-1 text-xs text-[var(--success)]">
                                                     <CheckCircle2 className="w-3 h-3" />
                                                     Swapped {entry.swapOutput}
                                                 </span>
@@ -1038,7 +1038,7 @@ export default function AgentPage() {
                                             href={`https://monadscan.com/tx/${entry.txHash}`}
                                             target="_blank"
                                             rel="noopener noreferrer"
-                                            className="text-xs text-blue-500 hover:underline flex items-center gap-1 mt-1"
+                                            className="text-xs text-[var(--info)] hover:underline flex items-center gap-1 mt-1"
                                         >
                                             View tx <ExternalLink className="w-3 h-3" />
                                         </a>
@@ -1050,10 +1050,10 @@ export default function AgentPage() {
                 )}
 
                 {/* Gemini + LiFi Info */}
-                <div className="bg-gradient-to-r from-primary/10 to-blue-100/50 dark:from-primary/20 dark:to-blue-900/20 rounded-2xl p-4 border border-primary/20">
+                <div className="bg-info-soft rounded-2xl p-4 border border-border">
                     <div className="flex items-start gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center">
-                            <Shield className="w-5 h-5 text-primary" />
+                        <div className="w-10 h-10 rounded-xl bg-surface-2 flex items-center justify-center">
+                            <Shield className="w-5 h-5 text-foreground" />
                         </div>
                         <div className="flex-1">
                             <h4 className="font-semibold text-sm">Gemini Flash + LiFi</h4>

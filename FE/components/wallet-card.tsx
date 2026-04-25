@@ -9,7 +9,13 @@ interface WalletCardProps {
     sharePrice: number;
     assetLabel?: string;
     walletAddress?: string;
-    variant?: 'gold' | 'blue' | 'dark';
+    /**
+     * Visual variant.
+     * - `ink`  (default): editorial near-black gradient with red highlight.
+     * - `red`: brand-accent red gradient — use for hero/CTA contexts.
+     * - `gold`: legacy gold gradient — kept for asset-detail screens.
+     */
+    variant?: 'ink' | 'red' | 'gold';
 }
 
 export function WalletCard({
@@ -18,96 +24,121 @@ export function WalletCard({
     sharePrice,
     assetLabel = 'XAUt0',
     walletAddress,
-    variant = 'gold',
+    variant = 'ink',
 }: WalletCardProps) {
     const [showBalance, setShowBalance] = useState(true);
     const [copied, setCopied] = useState(false);
 
     const shareValue = shares * sharePrice;
 
-    const variantClass = {
-        gold: 'wallet-card-gold',
-        blue: 'wallet-card-blue',
-        dark: '',
-    }[variant];
-
     const copyAddress = async () => {
-        if (walletAddress) {
-            await navigator.clipboard.writeText(walletAddress);
-            setCopied(true);
-            setTimeout(() => setCopied(false), 2000);
-        }
+        if (!walletAddress) return;
+        await navigator.clipboard.writeText(walletAddress);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
     };
 
     const formatAddress = (address: string) =>
-        `${address.slice(0, 6)}...${address.slice(-4)}`;
+        `${address.slice(0, 6)}…${address.slice(-4)}`;
+
+    const formatMoney = (n: number) =>
+        n.toLocaleString('en-US', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+        });
 
     return (
-        <div className={`wallet-card ${variantClass}`}>
-            <div className="absolute top-0 right-0 w-40 h-40 opacity-10">
-                <svg viewBox="0 0 200 200" fill="currentColor">
-                    <circle cx="100" cy="100" r="80" fill="none" stroke="currentColor" strokeWidth="1" />
-                    <circle cx="100" cy="100" r="60" fill="none" stroke="currentColor" strokeWidth="1" />
-                    <circle cx="100" cy="100" r="40" fill="none" stroke="currentColor" strokeWidth="1" />
+        <div className={`vault-card ${variant} text-white`}>
+            {/* Decorative concentric rings */}
+            <div
+                className="pointer-events-none absolute -top-6 -right-6 w-40 h-40 opacity-15"
+                aria-hidden
+            >
+                <svg viewBox="0 0 200 200" fill="none">
+                    <circle cx="100" cy="100" r="80" stroke="currentColor" />
+                    <circle cx="100" cy="100" r="60" stroke="currentColor" />
+                    <circle cx="100" cy="100" r="40" stroke="currentColor" />
                 </svg>
             </div>
 
             {/* Header */}
-            <div className="flex items-center justify-between mb-6 relative z-10">
+            <div className="relative z-10 flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center">
+                    <div className="w-8 h-8 rounded-lg bg-white/15 flex items-center justify-center backdrop-blur-sm">
                         <Sparkles className="w-4 h-4" />
                     </div>
-                    <span className="font-semibold text-sm opacity-90">Golda Vault</span>
+                    <span className="section-label !text-white/80">
+                        Golda Vault
+                    </span>
                 </div>
                 <button
                     onClick={() => setShowBalance(!showBalance)}
-                    className="p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors"
+                    className="btn-haptic p-2 rounded-full bg-white/10 hover:bg-white/20"
+                    aria-label={showBalance ? 'Hide balance' : 'Show balance'}
                 >
-                    {showBalance ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                    {showBalance ? (
+                        <Eye className="w-4 h-4" />
+                    ) : (
+                        <EyeOff className="w-4 h-4" />
+                    )}
                 </button>
             </div>
 
-            {/* Shares Value */}
-            <div className="mb-6 relative z-10">
-                <p className="text-xs opacity-70 mb-1">Savings Value</p>
-                <div className="flex items-baseline gap-2">
-                    <span className="text-4xl font-bold tracking-tight">
-                        {showBalance ? `$${shareValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '••••'}
-                    </span>
-                </div>
-                <p className="text-sm opacity-70 mt-1">
-                    {showBalance ? `${shares.toFixed(4)} gUSDC` : '••••'}{' · '}backed by {assetLabel}
+            {/* Savings value */}
+            <div className="relative z-10">
+                <p className="text-caption uppercase tracking-wider text-white/65 mb-1">
+                    Savings Value
+                </p>
+                <p className="text-large-title md:text-display font-num">
+                    {showBalance ? `$${formatMoney(shareValue)}` : '••••••'}
+                </p>
+                <p className="text-footnote text-white/70 mt-1">
+                    {showBalance
+                        ? `${shares.toFixed(4)} gUSDC`
+                        : '••••'}
+                    {' · backed by '}
+                    {assetLabel}
                 </p>
             </div>
 
-            {/* USDC Balance */}
-            <div className="mb-4 relative z-10">
-                <p className="text-xs opacity-70 mb-1">USDC Balance</p>
+            {/* USDC balance */}
+            <div className="relative z-10">
+                <p className="text-caption uppercase tracking-wider text-white/65 mb-1">
+                    USDC Balance
+                </p>
                 <div className="flex items-baseline gap-2">
-                    <span className="text-2xl font-semibold">
-                        {showBalance ? usdcBalance.toLocaleString('en-US', { minimumFractionDigits: 2 }) : '••••'}
+                    <span className="text-title-2 font-num">
+                        {showBalance ? formatMoney(usdcBalance) : '••••'}
                     </span>
-                    <span className="text-sm font-medium opacity-80">USDC</span>
+                    <span className="text-footnote font-medium text-white/80">
+                        USDC
+                    </span>
                 </div>
             </div>
 
             {walletAddress && (
-                <div className="flex items-center justify-between pt-4 border-t border-white/20 relative z-10">
+                <div className="relative z-10 flex items-center justify-between pt-3 border-t border-white/15">
                     <div>
-                        <p className="text-xs opacity-70">Wallet Address</p>
-                        <p className="font-mono text-sm">{formatAddress(walletAddress)}</p>
+                        <p className="text-caption uppercase tracking-wider text-white/65">
+                            Wallet
+                        </p>
+                        <p className="font-mono text-footnote">
+                            {formatAddress(walletAddress)}
+                        </p>
                     </div>
                     <button
                         onClick={copyAddress}
-                        className="p-2 rounded-lg bg-white/10 hover:bg-white/20 transition-colors"
+                        className="btn-haptic p-2 rounded-lg bg-white/10 hover:bg-white/20"
+                        aria-label="Copy wallet address"
                     >
-                        {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                        {copied ? (
+                            <Check className="w-4 h-4" />
+                        ) : (
+                            <Copy className="w-4 h-4" />
+                        )}
                     </button>
                 </div>
             )}
-
-            <div className="absolute bottom-6 right-6 w-12 h-9 rounded bg-gradient-to-br from-white/30 to-white/10 opacity-50" />
         </div>
     );
 }

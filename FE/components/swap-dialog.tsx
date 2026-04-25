@@ -221,10 +221,10 @@ export function SwapDialog({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>{children}</DialogTrigger>
-      <DialogContent className="sm:max-w-md rounded-3xl border-border bg-card">
+      <DialogContent className="sm:max-w-md rounded-2xl border-border bg-card">
         <DialogHeader className="text-left">
-          <div className="w-14 h-14 rounded-2xl bg-blue-100 dark:bg-blue-500/20 flex items-center justify-center mb-4">
-            <ArrowDownUp className="w-7 h-7 text-blue-500" />
+          <div className="w-14 h-14 rounded-2xl bg-info-soft flex items-center justify-center mb-4">
+            <ArrowDownUp className="w-7 h-7 text-[var(--info)]" />
           </div>
           <DialogTitle className="text-xl">Swap on Monad</DialogTitle>
           <DialogDescription className="leading-relaxed">
@@ -289,9 +289,10 @@ export function SwapDialog({
             <button
               onClick={handleSwapTokens}
               disabled={executing}
-              className="w-10 h-10 rounded-full bg-primary/10 border border-border flex items-center justify-center hover:bg-primary/20 transition-colors"
+              className="btn-haptic w-10 h-10 rounded-full bg-surface border border-border flex items-center justify-center hover:bg-surface-2 transition-colors"
+              aria-label="Swap direction"
             >
-              <ArrowDownUp className="w-5 h-5 text-primary" />
+              <ArrowDownUp className="w-5 h-5 text-foreground" />
             </button>
           </div>
 
@@ -345,9 +346,9 @@ export function SwapDialog({
 
           {/* Quote details */}
           {quote && (
-            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30 border border-blue-200/50 dark:border-blue-800/30 rounded-2xl p-4">
+            <div className="bg-info-soft border border-border/50 dark:border-border/30 rounded-2xl p-4">
               <div className="flex items-start gap-3">
-                <Zap className="w-5 h-5 text-blue-500 mt-0.5 shrink-0" />
+                <Zap className="w-5 h-5 text-[var(--info)] mt-0.5 shrink-0" />
                 <div className="space-y-2 text-sm w-full">
                   <p className="font-medium text-foreground">Route via {quote.toolUsed}</p>
                   <div className="space-y-1 text-muted-foreground">
@@ -377,7 +378,7 @@ export function SwapDialog({
 
           {/* Error */}
           {error && (
-            <div className="flex items-center gap-2 text-red-500 text-sm bg-red-50 dark:bg-red-500/10 p-4 rounded-xl">
+            <div className="flex items-center gap-2 text-[var(--destructive)] text-sm bg-destructive-soft p-4 rounded-xl">
               <AlertCircle className="w-5 h-5 shrink-0" />
               <p>{error}</p>
             </div>
@@ -385,7 +386,7 @@ export function SwapDialog({
 
           {/* Success status */}
           {swapStatus?.status === 'DONE' && txHash && (
-            <div className="flex items-center gap-2 text-green-500 text-sm bg-green-50 dark:bg-green-500/10 p-4 rounded-xl">
+            <div className="flex items-center gap-2 text-[var(--success)] text-sm bg-success-soft p-4 rounded-xl">
               <CheckCircle2 className="w-5 h-5 shrink-0" />
               <div className="flex-1">
                 <p className="font-medium">Swap completed!</p>
@@ -394,7 +395,7 @@ export function SwapDialog({
                     href={explorerUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-xs text-green-600 dark:text-green-400 hover:underline flex items-center gap-1"
+                    className="text-xs text-[var(--success)] dark:text-[var(--success)] hover:underline flex items-center gap-1"
                   >
                     View on MonadScan <ExternalLink className="w-3 h-3" />
                   </a>
@@ -405,7 +406,7 @@ export function SwapDialog({
 
           {/* Pending status */}
           {swapStatus?.status === 'PENDING' && txHash && (
-            <div className="flex items-center gap-2 text-amber-500 text-sm bg-amber-50 dark:bg-amber-500/10 p-4 rounded-xl">
+            <div className="flex items-center gap-2 text-[var(--warning)] text-sm bg-warning-soft p-4 rounded-xl">
               <Loader2 className="w-5 h-5 animate-spin shrink-0" />
               <div className="flex-1">
                 <p className="font-medium">Swap pending...</p>
@@ -414,7 +415,7 @@ export function SwapDialog({
                     href={explorerUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-xs text-amber-600 dark:text-amber-400 hover:underline flex items-center gap-1"
+                    className="text-xs text-[var(--warning)] dark:text-[var(--warning)] hover:underline flex items-center gap-1"
                   >
                     View on MonadScan <ExternalLink className="w-3 h-3" />
                   </a>
@@ -425,7 +426,7 @@ export function SwapDialog({
 
           {/* Failed status */}
           {swapStatus?.status === 'FAILED' && (
-            <div className="flex items-center gap-2 text-red-500 text-sm bg-red-50 dark:bg-red-500/10 p-4 rounded-xl">
+            <div className="flex items-center gap-2 text-[var(--destructive)] text-sm bg-destructive-soft p-4 rounded-xl">
               <AlertCircle className="w-5 h-5 shrink-0" />
               <p className="font-medium">Swap failed. Please try again.</p>
             </div>
@@ -441,7 +442,7 @@ export function SwapDialog({
               })}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-xs text-muted-foreground hover:text-primary flex items-center gap-1 justify-center"
+              className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 justify-center"
             >
               Open in Jumper Exchange <ExternalLink className="w-3 h-3" />
             </a>
@@ -467,7 +468,7 @@ export function SwapDialog({
           <Button
             onClick={handleExecuteSwap}
             disabled={!isSwapReady || !signerGetter || !walletAddress}
-            className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white rounded-xl py-5"
+            className="action-pill primary w-full sm:w-auto !h-12"
           >
             {executing ? (
               <>

@@ -228,7 +228,7 @@ function PayPageContent() {
     if (!ready || !authenticated) {
         return (
             <div className="min-h-screen flex items-center justify-center bg-background">
-                <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                <Loader2 className="w-8 h-8 animate-spin text-foreground" />
             </div>
         );
     }
@@ -245,10 +245,10 @@ function PayPageContent() {
                         <div className="w-10" />
                     </div>
                     <div className="flex-1 flex flex-col items-center justify-center p-4">
-                        <div id="qr-reader" className="w-full max-w-sm rounded-3xl overflow-hidden" style={{ background: '#000' }} />
+                        <div id="qr-reader" className="w-full max-w-sm rounded-2xl overflow-hidden" style={{ background: '#000' }} />
                         {scanSuccess && (
                             <div className="absolute inset-0 flex items-center justify-center bg-black/80">
-                                <div className="bg-green-500 rounded-full p-6 animate-bounce">
+                                <div className="bg-[var(--success)] rounded-full p-6 animate-bounce">
                                     <Check className="w-16 h-16 text-white" />
                                 </div>
                             </div>
@@ -257,7 +257,7 @@ function PayPageContent() {
                     <div className="p-6 text-center bg-black/80">
                         <p className="text-white/70 text-sm">Scan any EVM wallet QR code to auto-fill the address</p>
                         {error && (
-                            <div className="mt-4 flex items-center justify-center gap-2 text-red-400">
+                            <div className="mt-4 flex items-center justify-center gap-2 text-[var(--destructive)]">
                                 <AlertCircle className="w-4 h-4" />
                                 <span className="text-sm">{error}</span>
                             </div>
@@ -266,27 +266,34 @@ function PayPageContent() {
                 </div>
             )}
 
-            <div className="bg-gradient-to-b from-primary to-primary/90 text-white px-4 pt-12 pb-8 rounded-b-3xl">
-                <div className="flex items-center gap-4 mb-6">
+            <div className="vault-card ink !rounded-none !rounded-b-2xl px-4 pt-12 pb-8 !min-h-0">
+                <div className="relative z-10 flex items-center gap-4 mb-6">
                     <button
                         onClick={() => router.push('/dashboard')}
-                        className="p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors"
+                        className="btn-haptic p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors"
+                        aria-label="Back"
                     >
                         <ArrowLeft className="w-5 h-5" />
                     </button>
-                    <h1 className="text-xl font-semibold">Pay USDC</h1>
+                    <h1 className="text-title-2">Pay USDC</h1>
                 </div>
 
-                <div className="bg-white/10 rounded-2xl p-4 mb-4">
-                    <p className="text-white/70 text-sm">Available USDC</p>
-                    <p className="text-3xl font-bold">${balances.usdc.toFixed(2)}</p>
+                <div className="relative z-10 bg-white/10 rounded-2xl p-4 mb-4">
+                    <p className="text-caption uppercase tracking-wider text-white/65">
+                        Available USDC
+                    </p>
+                    <p className="text-large-title font-num">
+                        ${balances.usdc.toFixed(2)}
+                    </p>
                 </div>
 
-                <div className="flex gap-2 bg-white/10 rounded-2xl p-1">
+                <div className="relative z-10 flex gap-2 bg-white/10 rounded-2xl p-1">
                     <button
                         onClick={() => setMode('scan')}
-                        className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-medium transition-colors ${
-                            mode === 'scan' ? 'bg-white text-primary' : 'text-white/80 hover:text-white'
+                        className={`btn-haptic flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-semibold transition-colors ${
+                            mode === 'scan'
+                                ? 'bg-white text-foreground'
+                                : 'text-white/80 hover:text-white'
                         }`}
                     >
                         <QrCode className="w-5 h-5" />
@@ -294,8 +301,10 @@ function PayPageContent() {
                     </button>
                     <button
                         onClick={() => setMode('send')}
-                        className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-medium transition-colors ${
-                            mode === 'send' ? 'bg-white text-primary' : 'text-white/80 hover:text-white'
+                        className={`btn-haptic flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-semibold transition-colors ${
+                            mode === 'send'
+                                ? 'bg-white text-foreground'
+                                : 'text-white/80 hover:text-white'
                         }`}
                     >
                         <Send className="w-5 h-5" />
@@ -307,20 +316,20 @@ function PayPageContent() {
             <div className="p-4 space-y-6 animate-fade-in">
                 {mode === 'scan' ? (
                     <>
-                        <div className="bg-card rounded-2xl p-6 border border-border">
+                        <div className="ios-card-elev p-6">
                             <div className="text-center space-y-4">
-                                <div className="w-20 h-20 mx-auto bg-primary/10 rounded-2xl flex items-center justify-center">
-                                    <Camera className="w-10 h-10 text-primary" />
+                                <div className="w-20 h-20 mx-auto bg-foreground text-background rounded-2xl flex items-center justify-center">
+                                    <Camera className="w-10 h-10" />
                                 </div>
                                 <div>
-                                    <h3 className="font-semibold text-lg">Scan to Pay</h3>
-                                    <p className="text-muted-foreground text-sm mt-1">
+                                    <h3 className="text-title-3">Scan to Pay</h3>
+                                    <p className="text-footnote text-muted-foreground mt-1">
                                         Scan any EVM wallet QR code to send USDC instantly
                                     </p>
                                 </div>
                                 <Button
                                     onClick={startScanning}
-                                    className="w-full bg-primary hover:bg-primary/90 text-white py-6 text-base rounded-xl"
+                                    className="action-pill primary w-full !h-14"
                                 >
                                     <Camera className="w-5 h-5 mr-2" />
                                     Open Scanner
@@ -328,13 +337,15 @@ function PayPageContent() {
                             </div>
                         </div>
 
-                        <div className="bg-card rounded-2xl p-6 border border-border">
-                            <h3 className="font-semibold mb-4">Receive Payment</h3>
+                        <div className="ios-card-elev p-6">
+                            <h3 className="text-headline mb-4">Receive Payment</h3>
                             <div className="bg-muted rounded-xl p-4">
                                 <div className="flex items-center justify-between">
                                     <div>
-                                        <p className="text-sm text-muted-foreground">Your Address</p>
-                                        <p className="font-mono text-sm mt-1">
+                                        <p className="text-caption uppercase tracking-wider text-muted-foreground">
+                                            Your Address
+                                        </p>
+                                        <p className="font-mono text-subhead mt-1">
                                             {user?.wallet?.address
                                                 ? `${user.wallet.address.slice(0, 10)}...${user.wallet.address.slice(-8)}`
                                                 : 'Not connected'}
@@ -342,10 +353,11 @@ function PayPageContent() {
                                     </div>
                                     <button
                                         onClick={copyAddress}
-                                        className="p-3 rounded-xl bg-background hover:bg-secondary transition-colors"
+                                        className="btn-haptic p-3 rounded-xl bg-background hover:bg-surface transition-colors"
+                                        aria-label="Copy address"
                                     >
                                         {copied ? (
-                                            <Check className="w-5 h-5 text-green-500" />
+                                            <Check className="w-5 h-5 text-[var(--success)]" />
                                         ) : (
                                             <Copy className="w-5 h-5 text-muted-foreground" />
                                         )}
@@ -356,7 +368,7 @@ function PayPageContent() {
                     </>
                 ) : (
                     <>
-                        <div className="bg-card rounded-2xl p-6 border border-border space-y-6">
+                        <div className="ios-card-elev p-6 space-y-6">
                             <div className="space-y-2">
                                 <label className="text-sm font-medium">Recipient Address</label>
                                 <div className="relative">
@@ -370,7 +382,7 @@ function PayPageContent() {
                                     />
                                 </div>
                                 <p className="text-xs text-muted-foreground">
-                                    Enter any EVM wallet address (Monad Testnet)
+                                    Enter any EVM wallet address (Monad Mainnet)
                                 </p>
                             </div>
 
@@ -401,10 +413,10 @@ function PayPageContent() {
                                             key={amt}
                                             onClick={() => setAmount(amt.toString())}
                                             disabled={amt > balances.usdc || isSending}
-                                            className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
+                                            className={`btn-haptic flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
                                                 amount === amt.toString()
-                                                    ? 'bg-primary text-white'
-                                                    : 'bg-muted hover:bg-secondary text-foreground'
+                                                    ? 'bg-foreground text-background'
+                                                    : 'bg-surface hover:bg-surface-2 text-foreground'
                                             } ${amt > balances.usdc ? 'opacity-50 cursor-not-allowed' : ''}`}
                                         >
                                             ${amt}
@@ -414,14 +426,14 @@ function PayPageContent() {
                             </div>
 
                             {error && (
-                                <div className="flex items-center gap-2 text-red-500 text-sm bg-red-50 dark:bg-red-500/10 p-3 rounded-xl">
+                                <div className="flex items-center gap-2 text-[var(--destructive)] text-sm bg-destructive-soft p-3 rounded-xl">
                                     <AlertCircle className="w-4 h-4 shrink-0" />
                                     {error}
                                 </div>
                             )}
 
                             {txHash && (
-                                <div className="flex items-center gap-2 text-green-500 text-sm bg-green-50 dark:bg-green-500/10 p-3 rounded-xl">
+                                <div className="flex items-center gap-2 text-[var(--success)] text-sm bg-success-soft p-3 rounded-xl">
                                     <Check className="w-4 h-4 shrink-0" />
                                     <span>Sent!</span>
                                     <a
@@ -438,7 +450,7 @@ function PayPageContent() {
                             <Button
                                 onClick={handleSend}
                                 disabled={isSending || !amount || !recipientAddress}
-                                className="w-full bg-primary hover:bg-primary/90 text-white py-6 text-base rounded-xl disabled:opacity-50"
+                                className="action-pill primary w-full !h-14 disabled:opacity-50"
                             >
                                 {isSending ? (
                                     <>
@@ -455,22 +467,25 @@ function PayPageContent() {
                         </div>
 
                         {recentRecipients.length > 0 && (
-                            <div className="bg-card rounded-2xl p-4 border border-border">
-                                <h3 className="font-semibold mb-3 px-2">Recent</h3>
+                            <div className="ios-card p-4">
+                                <h3 className="text-headline mb-3 px-2">Recent</h3>
                                 <div className="space-y-1">
                                     {recentRecipients.map((recipient, i) => (
                                         <button
                                             key={i}
                                             onClick={() => setRecipientAddress(recipient.address)}
-                                            className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-muted transition-colors"
+                                            className="btn-haptic w-full flex items-center justify-between p-3 rounded-xl hover:bg-surface transition-colors"
                                         >
                                             <div className="flex items-center gap-3">
-                                                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-amber-500 flex items-center justify-center text-white font-medium">
-                                                    {recipient.address.slice(2, 4).toUpperCase()}
+                                                <div className="w-10 h-10 rounded-full bg-foreground text-background flex items-center justify-center text-subhead font-semibold">
+                                                    {recipient.address
+                                                        .slice(2, 4)
+                                                        .toUpperCase()}
                                                 </div>
                                                 <div className="text-left">
-                                                    <p className="font-mono text-sm">
-                                                        {recipient.address.slice(0, 6)}...{recipient.address.slice(-4)}
+                                                    <p className="font-mono text-subhead">
+                                                        {recipient.address.slice(0, 6)}…
+                                                        {recipient.address.slice(-4)}
                                                     </p>
                                                 </div>
                                             </div>
@@ -481,8 +496,11 @@ function PayPageContent() {
                             </div>
                         )}
 
-                        <div className="bg-muted/50 rounded-xl p-3 text-center text-xs text-muted-foreground">
-                            Sending on <span className="font-medium">Monad Testnet</span>
+                        <div className="ios-card p-3 text-center text-footnote text-muted-foreground">
+                            Sending on{' '}
+                            <span className="font-semibold text-foreground">
+                                Monad Mainnet
+                            </span>
                         </div>
                     </>
                 )}
@@ -495,7 +513,7 @@ export default function PayPage() {
     return (
         <Suspense fallback={
             <div className="min-h-screen flex items-center justify-center bg-background">
-                <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                <Loader2 className="w-8 h-8 animate-spin text-foreground" />
             </div>
         }>
             <PayPageContent />
