@@ -700,10 +700,14 @@ export default function AgentPage() {
 
                     {agentEnabled && (
                         <div className="p-4 space-y-4 bg-success-soft/40">
-                            {/* How it works */}
-                            <div className="bg-white/50 dark:bg-white/5 rounded-xl p-3 text-xs text-muted-foreground">
-                                <p className="font-medium text-foreground mb-1">How Auto-Agent Works:</p>
-                                <ul className="space-y-1 list-disc list-inside">
+                            {/* How it works — uses theme-aware tokens (bg-card +
+                                border-border) instead of bg-white/x so the panel
+                                actually contrasts against the green-tinted parent
+                                in both light and dark modes. Markers tinted to
+                                --success to stay in family with the green wrapper. */}
+                            <div className="bg-card border border-border rounded-xl p-3.5 text-xs text-muted-foreground">
+                                <p className="font-semibold text-foreground mb-2">How Auto-Agent Works</p>
+                                <ul className="space-y-1.5 list-disc list-outside pl-4 marker:text-[var(--success)]">
                                     <li>AI monitors gold market every 5 minutes</li>
                                     <li>Automatically swaps USDC to your target asset via LiFi</li>
                                     <li>Works even when you close the app</li>
